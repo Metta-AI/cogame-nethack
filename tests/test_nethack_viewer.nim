@@ -61,6 +61,11 @@ suite "the broadcast page is the starter's plus an appended block":
   test "the removed elements appear nowhere in the page":
     for id in ["povBadge", "fpv-hp", "fpv-gear", "fpv-map", "fpv-map-canvas"]:
       check ("id=\"" & id & "\"") notin page
+      ## and nothing READS them either: the JS that fed them went with them,
+      ## so a null-guarded reader of a deleted id cannot survive
+      check ("$('" & id & "')") notin page
+    for name in ["renderFpvMap", "syncFpvMapShape", "fpvMapCanvas"]:
+      check name notin page
 
   test "the appended block only appends":
     check appended.startsWith(starterMarker)
