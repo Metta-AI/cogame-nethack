@@ -270,6 +270,63 @@ suite "replay_summary is strict UTF-8 JSON":
     check node{"tickCount"}.getInt() > 0
     check node{"results"}{"reason"}.getStr() == "complete"
 
+suite "the 1/2x replay speed is a frame-parity crawl":
+  test "'5' selects it, the chrome reads 0.5, and a tick lands every other frame":
+    ## The fleet-wide 1/2x speed. It is a REPLAY speed: the engine keeps an
+    ## integer tick budget (the live loop has no fractional pace), and the
+    ## halved rate comes from spending that budget on alternate frames only.
+    var config = defaultGameConfig()
+    var sim = initSimServer(config)
+    var player = initReplayPlayer(ReplayData())
+
+    player.applyReplayCommand(sim, config, '5')
+    check player.speedIndex == ReplayHalfSpeedIndex
+    check player.replayDisplaySpeed() == 0.5
+    check player.replaySpeed() == 1
+
+    player.skipLulls = false
+    player.halfPhase = false
+    check player.replayStepBudget(0) == 0
+    player.halfPhase = true
+    check player.replayStepBudget(0) == 1
+
+    ## a lull is still skipped at 1/2x: the boost wins over the parity
+    player.skipLulls = true
+    player.lullSpans = @[[0, 10]]
+    player.halfPhase = false
+    check player.replayStepBudget(0) == LullSpeedBoost
+
+    ## the chips' neighbours: '-' from 1x lands on 1/2x and floors there,
+    ## '+' climbs back out to 1x
+    player.speedIndex = 0
+    player.applyReplayCommand(sim, config, '-')
+    check player.speedIndex == ReplayHalfSpeedIndex
+    player.applyReplayCommand(sim, config, '-')
+    check player.speedIndex == ReplayHalfSpeedIndex
+    player.applyReplayCommand(sim, config, '+')
+    check player.speedIndex == 0
+
+  test "a played frame flips the parity, so playback halves end to end":
+    ## Through the real frame entry point: eight frames at 1/2x advance the
+    ## sim exactly half as far as eight frames at 1x.
+    let path = tempReplayPath("halfspeed")
+    discard recordEpisode(path, 42)
+    defer: removeFile(path)
+
+    proc ticksOverFrames(speedCommand: char): int =
+      var (sim, player, config) = replaySim(path)
+      player.skipLulls = false
+      discard player.advanceReplayFrame(sim, config, newSeq[int](), [speedCommand])
+      let before = sim.tickCount
+      for _ in 0 ..< 8:
+        discard player.advanceReplayFrame(sim, config, newSeq[int](), newSeq[char]())
+      sim.tickCount - before
+
+    let full = ticksOverFrames('1')
+    let half = ticksOverFrames('5')
+    check full == 4
+    check half == 2
+
 suite "every committed fixture carries the current GameVersion":
   test "the fixture replays load under this build's spec":
     for path in walkFiles("tests/fixtures/*.replay"):

@@ -73,7 +73,7 @@ is **larger than the frame**, so unlike most paintbot forks this one **keeps `#v
 | Public `Metta-AI/cogame-nethack` | §Packaging (created `--public`; `source-resolves` 404s on private) |
 | LLM policy **and** scripted baseline day one, one image, env-switched | §Decisions (`PLAYER_PROMPT` vs `PLAYER_SCRIPTED=delver\|bumbler`) |
 | Static wasm replay viewer, never a pod | §Viewer (`replay_viewer.bundle = static-replay-viewer`, `tools/build_replay_viewer.sh`) |
-| Starter chrome verbatim, real art | §Viewer (chrome provenance, byte-for-byte `chrome_common.js`, starter art + install-time bakes) |
+| Starter chrome verbatim (bar the fleet 1/2x transport patch), real art | §Viewer (chrome provenance, `chrome_common.js` byte-pinned, starter art + install-time bakes) |
 | Two name spaces | §The game (in-game alias `Alpha the Digger`; real policy names spectator-side only) |
 | Degrade never hang, play inside 60 % of 1200 s | §Decisions (typical 227 s, worst 645 s, engine stop 660 s, budget 720 s) |
 | `num_agents` in every variant **and** the cert fixture, inside `game_config` | §Packaging — `num_agents: 1`, three times |
@@ -1078,7 +1078,7 @@ starter's language and the whole reason NLE/MiniHack are not an option here.
 | `src/ctf/sim_config.nim` → `src/nethack/sim_config.nim` | **fork** | `GameConfig` lifecycle, `config.update`, and the validators at `:686-713` (whole-second `attempt1Ms`/`retryMs`, `attempt1Ms + retryMs ≤ turnBudgetMs`, non-negative `turnSpacingMs`, positive `wallClockBudgetSeconds`) — all kept, and §Decisions' numbers are chosen to satisfy them |
 | `src/ctf.nim` → `src/nethack.nim` | **fork** | the entrypoint, **including seed randomisation before `config.update`** so seed-derived draws follow the final seed |
 | `src/paintball_player.nim` → `src/nethack_player.nim` | **fork** | the thin seat registrar (§Decisions) |
-| `client/chrome_common.js` | **byte-for-byte** (40 022 bytes, sha256 `7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c`) | §Viewer |
+| `client/chrome_common.js` | **byte-for-byte, plus the fleet 1/2x transport patch** (40 037 bytes, sha256 `594ed4a72cd908922c982d0f3e3ffb04ae1d97568fcd5f5daa794042662a369c`) | §Viewer |
 | `client/broadcast_core.js`, `replay_broadcast.html`, `league_replayer.html` | **fork** | §Viewer |
 | `replay-viewer/config.nims`, `static_replay.js`, `static_replay_worker.js` | **fork: identifiers and the output name only** | the emscripten link flags and the Worker bootstrap (§Viewer) |
 | `replay-viewer/ctf_replay.nim` → `replay-viewer/nethack_replay.nim` | **fork** | §Viewer |
@@ -1518,9 +1518,11 @@ call site (chorus `3c11c953`, 2026-08-24), or the softmax.com embed samples an u
 
 ### Chrome provenance
 
-- **`client/chrome_common.js` is copied byte-for-byte** (40 022 bytes; sha256
-  `7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c`). Not edited, not reformatted;
-  `tests/test_nethack_viewer.nim` pins that sha256 as a literal. Everything this game adds lives in
+- **`client/chrome_common.js` is copied byte-for-byte** apart from the fleet-wide replay
+  transport patch — the `0.5` entry in the `SPEEDS` fallback and the `0.5: '5'` entry in the
+  speed→command map, which is how the 1/2x chip reaches `replays.applySpeedCommand` (40 037 bytes;
+  sha256 `594ed4a72cd908922c982d0f3e3ffb04ae1d97568fcd5f5daa794042662a369c`). Otherwise not edited, not
+  reformatted; `tests/test_nethack_viewer.nim` pins that sha256 as a literal. Everything this game adds lives in
   the appended game block. Its `markBeat` / `renderBeatMarkers` / `ingestBeats` / `renderClock` /
   `renderTransport` / `ingestLullSpans` / `renderMomentum` remain; `ingestBeats` ignores kinds it does
   not know.
@@ -1637,6 +1639,10 @@ click. CSS exists for **every kind emitted and no others**: `.beat-marker.descen
 `[0.5, 1, 2, 4, 8]`, default 1), with the cog's and the monsters' positions interpolated across the
 two frames so a step glides rather than snapping. A full 2200-tick episode therefore plays for
 **147 s** at 1× and 18 s at 8×; a typical run that ends in death around tick 1000 plays for 67 s. The
+0.5× chip is not a fifth `PlaybackSpeeds` entry — the live loop has no fractional pace — but the
+`ReplayHalfSpeedIndex` (-1) sentinel, selected by command `'5'` and by `'-'` from 1×: the tick budget
+is spent only on alternate frames (`ReplayPlayer.halfPhase`), so a dungeon step takes four frames and
+the episode plays for 294 s. `buildStateJson`'s `sp` is a float so the chrome can light that chip. The
 skip-lulls control (a lull = 40 consecutive ticks with no `kill`, `hurt`, `gold`, `item`, `door`,
 `trap`, `descend` or `deed` event, from the pre-scan) compresses long corridor travel, and
 `viewer_smoke.mjs --soak 10` always observes real advancement (the ecos 2026-08-23 scar).
@@ -2105,8 +2111,9 @@ both debug and `-d:release`). `tests/config.nims` (`--path:"../src"`) is the sta
 
 **Viewer** (`tests/test_nethack_viewer.nim`, static assertions in the `test` job)
 
-40. `chrome_common is byte-identical` — sha256 of `client/chrome_common.js` equals
-    `7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c`, pinned as a literal.
+40. `chrome_common is the starter's plus the fleet transport patch` — sha256 of
+    `client/chrome_common.js` equals
+    `594ed4a72cd908922c982d0f3e3ffb04ae1d97568fcd5f5daa794042662a369c`, pinned as a literal.
 41. `broadcast html is starter plus block` — the file begins with the starter's bytes up to the
     documented splice marker (`replay_broadcast.html:4344`) and only appends after it;
     `broadcast_core.js`'s kept procs are byte-identical to the starter's, `pushFeed`'s signature and

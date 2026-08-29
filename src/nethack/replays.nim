@@ -35,6 +35,11 @@ const
   MinLullTicks* = 60
   LullSpeedBoost* = 8
   MaxLullTicksPerFrame* = 64
+  ReplayHalfSpeedIndex* = -1
+    ## speedIndex sentinel for 1/2x playback: the tick budget is spent only
+    ## every OTHER frame, so a dungeon step takes four animation frames
+    ## instead of two. Replay-only — `replaySpeed` clamps it back to
+    ## PlaybackSpeeds[0] (1x) for anything that wants an integer speed.
 
 type
   TurnPlan* = object
@@ -67,6 +72,11 @@ type
     looping*: bool
     skipLulls*: bool
     speedIndex*: int
+      ## Index into PlaybackSpeeds, or ReplayHalfSpeedIndex (-1) for the
+      ## replay-only 1/2x speed.
+    halfPhase*: bool
+      ## Frame parity while at 1/2x: the tick budget is spent only on the
+      ## `true` frames, toggled once per `advanceReplayFrame`.
     startTick*: int
     maxTick*: int
     endHoldFrames*: int
@@ -144,7 +154,15 @@ proc initReplayPlayer*(data: ReplayData): ReplayPlayer =
 proc replayMaxTick*(replay: ReplayPlayer): int = max(1, replay.maxTick)
 proc replayStartTick*(replay: ReplayPlayer): int = max(0, replay.startTick)
 proc replaySpeed*(replay: ReplayPlayer): int =
+  ## The integer tick budget per frame (1 while at 1/2x — the fractional
+  ## pace lives in `replayStepBudget`'s frame parity).
   PlaybackSpeeds[clamp(replay.speedIndex, 0, PlaybackSpeeds.len - 1)]
+
+proc replayDisplaySpeed*(replay: ReplayPlayer): float =
+  ## The speed the chrome shows on its chips: 0.5 at 1/2x, else the integer
+  ## speed.
+  if replay.speedIndex == ReplayHalfSpeedIndex: 0.5
+  else: float(replay.replaySpeed())
 
 proc applyStop(replay: ReplayPlayer, sim: var SimServer) =
   ## The wall-clock / fault stop is a LOAD-BEARING record, not an inference:
@@ -217,9 +235,12 @@ proc seekReplay*(replay: var ReplayPlayer, sim: var SimServer,
   replay.endHoldFrames = 0
 
 proc applySpeedCommand(speedIndex: var int, command: char) =
+  ## One playback speed command. '5' selects the 1/2x replay speed
+  ## (ReplayHalfSpeedIndex), which is also where stepping down from 1x lands.
   case command
   of '+', '=': speedIndex = min(speedIndex + 1, PlaybackSpeeds.len - 1)
-  of '-', '_': speedIndex = max(speedIndex - 1, 0)
+  of '-', '_': speedIndex = max(speedIndex - 1, ReplayHalfSpeedIndex)
+  of '5': speedIndex = ReplayHalfSpeedIndex
   of '1': speedIndex = 0
   of '2': speedIndex = 1
   of '4': speedIndex = 2
@@ -233,7 +254,7 @@ proc applyReplayCommand*(replay: var ReplayPlayer, sim: var SimServer,
   of ' ': replay.playing = not replay.playing
   of 'p': replay.playing = true
   of 'P': replay.playing = false
-  of '+', '=', '-', '_', '1', '2', '4', '8': applySpeedCommand(replay.speedIndex, command)
+  of '+', '=', '-', '_', '1', '2', '4', '5', '8': applySpeedCommand(replay.speedIndex, command)
   of ',', '<':
     replay.playing = false
     replay.seekReplay(sim, config, replay.replayStartTick())
@@ -262,3 +283,16 @@ proc isLullTick*(replay: ReplayPlayer, tick: int): bool =
     if tick >= span[0] and tick <= span[1]:
       return true
   false
+
+proc replayStepBudget*(replay: ReplayPlayer, tick: int): int =
+  ## How much this frame may add to the tick accumulator: the chosen speed,
+  ## boosted inside a lull while skip-lulls is on. At 1/2x the budget is
+  ## spent only on alternate frames (halfPhase parity) — a dungeon step then
+  ## takes four frames instead of the 1x two. The lull boost wins over the
+  ## parity: a crawl through dead air is still dead air.
+  let speed = replay.replaySpeed()
+  if replay.skipLulls and replay.isLullTick(tick):
+    return min(MaxLullTicksPerFrame, speed * LullSpeedBoost)
+  if replay.speedIndex == ReplayHalfSpeedIndex:
+    return (if replay.halfPhase: 1 else: 0)
+  speed
