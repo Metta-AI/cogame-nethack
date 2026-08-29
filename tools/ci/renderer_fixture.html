@@ -253,6 +253,12 @@
     win.dispatchEvent(new win.Event('resize'));
     await rafs(win, 4);
 
+    // ONE SYNCHRONOUS BATCH from here on. The page under test is a live
+    // replay: its own frame loop pushes feed rows and takes the endcard down
+    // on every frame whose phase is not gameover, so anything measured after
+    // an await is measuring a race. getBoundingClientRect forces layout
+    // synchronously and every animation is already settled, so the rows and
+    // the tombstone are measured in the same task that produced them.
     var state = stateFor('', 'playing');
     var chrome = win.NethackChrome;
     chrome.frame(state, undefined, true);
@@ -261,7 +267,6 @@
       chrome.event(events[i], state);
     }
     chrome.frame(state, undefined, false);
-    await rafs(win, 6);
 
     var doc = win.document;
     var row = sayRow(win);
@@ -295,10 +300,9 @@
     var rules = ['death', 'bottom', 'escaped', 'turnCap'];
     for (var r = 0; r < rules.length; r += 1) {
       var over = stateFor(rules[r], 'gameover');
-      chrome.frame(over, undefined, true);
       var card = doc.getElementById('endcard');
       if (card) card.classList.add('on');
-      await rafs(win, 3);
+      chrome.frame(over, undefined, true);
       measure(win, rules[r] + ' tombstone',
               doc.getElementById('ec-headline'), width, true);
       measure(win, rules[r] + ' summary', doc.getElementById('ec-how'), width,
@@ -355,6 +359,18 @@
       '*, *::before, *::after { animation: none !important; ' +
       'transition: none !important; }';
     win.document.head.appendChild(settleStyle);
+    // Let the replay actually load before touching anything: in CI the iframe
+    // is booting the shipped wasm module against the smoke replay, and the
+    // page's own frame loop is what takes the endcard down and ages feed rows
+    // out. Either signal is enough; neither is required (the fixture measures
+    // the chrome, not the replay).
+    var loadDeadline = Date.now() + 20000;
+    while (Date.now() < loadDeadline) {
+      var root = win.document.documentElement;
+      if (root.getAttribute('data-replay-loaded') === 'true' ||
+          root.getAttribute('data-replay-error')) break;
+      await new Promise(function (r) { setTimeout(r, 200); });
+    }
     // Pause playback through the page's own transport, so a replay that is
     // still running cannot age a measured row out from under the measurement.
     // The button's own glyph is the page's play/pause state, so this pauses a
