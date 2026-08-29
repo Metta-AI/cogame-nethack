@@ -70,6 +70,11 @@ proc beginTurn*(sim: var SimServer, actions: seq[Action], dropped: int): TurnRun
   ## the previous turn.
   if sim.ended:
     return
+  ## The first command turn IS the start of play, live and in replay alike —
+  ## a replay whose phase never left Lobby leaves the inherited clock reading
+  ## "waiting for players" over a board that is plainly moving.
+  if sim.phase == Lobby:
+    sim.phase = Playing
   sim.messages.setLen(0)
   let plan = sim.expandPlan(actions)
   sim.queue = plan.queue

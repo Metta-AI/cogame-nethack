@@ -548,9 +548,31 @@ button.beat-marker {
     }
   }
 
+  // ---- the clock ----------------------------------------------------------
+  // The inherited #clock column is a match clock; this game's clock is the
+  // dungeon level, the turn and the run's own vitals. Written after the
+  // shared chrome's renderClock, which owns the element.
+  function renderDungeonClock(s) {
+    var nh = s.nh || {};
+    var time = $('clock-time');
+    if (time) {
+      var big = 'DLVL ' + (nh.depth || 1);
+      if (time.textContent !== big) time.textContent = big;
+    }
+    var caption = $('clock-caption');
+    if (caption) {
+      var line = 'T:' + (s.t || 0) + ' · turn ' + (nh.turn || 0) + '/' +
+        (nh.turns || 0) + ' · HP ' + (nh.hp || 0) + '/' + (nh.maxhp || 0) +
+        ' · $' + (nh.gold || 0) + ' · ' + (nh.hunger || '') +
+        ' · score ' + (nh.score || 0);
+      if (caption.textContent !== line) caption.textContent = line;
+    }
+  }
+
   function nhFrame(s, ctx, jumped) {
     CTX = ctx;
     if (jumped) { placed = {}; lastEnd = ''; }
+    renderDungeonClock(s);
     renderDeeds(s);
     renderLadder(s);
     renderTerminal(s);
