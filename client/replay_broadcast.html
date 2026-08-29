@@ -2628,6 +2628,7 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     }
 
     renderFpvHud(fp.self);
+    renderFpvMap(fp);
   }
 
   // Draw the paint splatter: gooey team-colored blobs with soft edges + drips,
@@ -3206,6 +3207,182 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     var nameEl = $('fpv-name');
     nameEl.className = 'fpv-name ' + (self.team || '');
     nameEl.textContent = lastState ? shortName(rosterName(lastState, lastState.pov)) : '';
+    // hp pips: fill = remaining, hollow = spent (cap the row so it never wraps)
+    var maxHp = Math.max(self.hp || 0, 3);
+    var hpEl = $('fpv-hp'), hpHtml = '';
+    if (!hpEl) return;
+    for (var i = 0; i < maxHp; i++) {
+      hpHtml += '<i' + (i < self.hp ? '' : ' class="spent"') + '></i>';
+    }
+    hpEl.innerHTML = hpHtml;
+    // gear: lives count, carried pickups, and the enemy-heart flag
+    var gearEl = $('fpv-gear'), bits = [];
+    if (typeof self.lives === 'number') bits.push('×' + self.lives);
+    (self.items || []).forEach(function (it) { bits.push(ITEM_LABEL[it] || it.toUpperCase()); });
+    var html = bits.map(function (b) { return '<span>' + b + '</span>'; }).join('');
+    if (self.carry) html += '<span class="carry">♥ HEART</span>';
+    gearEl.innerHTML = html;
+  }
+
+  // Un-fogged tactical minimap: the whole arena silhouette with every unit, both
+  // hearts, present pickups, and the POV seat's vision wedge + bubble. Full
+  // spatial context — deliberately NOT fog-limited — so the viewer always knows
+  // where the EYES are looking and located.
+  var fpvMapEl = $('fpv-map'), fpvMapCanvas = $('fpv-map-canvas'), fpvMapCtx = null;
+
+  // The playfield boundary, as a PATH. Everything that needs the field's extent
+  // (the floor wash, the outline) goes through this one function, so a board
+  // that is not a rectangle — a hex field — swaps its body and nothing else.
+  function fieldBoundaryPath(ctx, ox, oy, w, h) {
+    ctx.beginPath();
+    ctx.rect(ox, oy, w, h);
+  }
+
+  // Give the inset the BOARD's shape, not a hard-coded one. Bounded on BOTH
+  // axes — 38% of the PiP wide, and never more than 42% of it tall — so a
+  // square four-team board shows square instead of ballooning down over the
+  // raycast. The 1235×659 arena is untouched by the height bound (38% wide is
+  // only ~30% tall). The CSS `aspect-ratio` literal is the pre-stream default.
+  var fpvMapShape = '';
+  function syncFpvMapShape(m) {
+    var box = fpvMapEl.parentElement;
+    var bw = box ? box.clientWidth : 0, bh = box ? box.clientHeight : 0;
+    if (!(m.w > 1) || !(m.h > 1) || !bw || !bh) return;
+    var key = m.w + 'x' + m.h + '@' + bw + 'x' + bh;
+    if (key === fpvMapShape) return;
+    fpvMapShape = key;
+    var wFrac = 0.38;
+    var hFrac = wFrac * (bw / bh) * (m.h / m.w);
+    if (hFrac > 0.42) wFrac *= 0.42 / hFrac;
+    fpvMapEl.style.aspectRatio = m.w + ' / ' + m.h;
+    fpvMapEl.style.width = (wFrac * 100).toFixed(2) + '%';
+  }
+
+  function renderFpvMap(fp) {
+    if (!fpvMapEl) return;
+    var m = fp.map;
+    if (!m) { fpvMapEl.style.display = 'none'; return; }
+    fpvMapEl.style.display = 'block';
+    syncFpvMapShape(m);
+    if (!fpvMapCtx) fpvMapCtx = fpvMapCanvas.getContext('2d');
+    var ctx = fpvMapCtx;
+    var dpr = window.devicePixelRatio || 1;
+    var cssW = fpvMapCanvas.clientWidth || 130, cssH = fpvMapCanvas.clientHeight || 70;
+    var W = Math.max(1, Math.round(cssW * dpr)), H = Math.max(1, Math.round(cssH * dpr));
+    if (fpvMapCanvas.width !== W) fpvMapCanvas.width = W;
+    if (fpvMapCanvas.height !== H) fpvMapCanvas.height = H;
+    // ONE uniform world px → canvas px scale, centered. Independent x/y scales
+    // squash any board whose aspect differs from the inset's and turn every
+    // circle drawn here into an ellipse; syncFpvMapShape normally leaves the
+    // bands at zero, and this keeps the map honest when it cannot (min/max
+    // width clamps, a user-resized PiP, a frame before the reshape lands).
+    var sc = Math.min(W / m.w, H / m.h);
+    var fw = m.w * sc, fh = m.h * sc;
+    var ox = (W - fw) / 2, oy = (H - fh) / 2;
+    function px(x) { return ox + x * sc; }
+    function py(y) { return oy + y * sc; }
+
+    // floor wash, confined to the field
+    ctx.clearRect(0, 0, W, H);
+    fieldBoundaryPath(ctx, ox, oy, fw, fh);
+    ctx.fillStyle = 'rgba(20,15,10,0.55)';
+    ctx.fill();
+
+    // baked terrain silhouette (stone + glass), scaled to the field
+    if (fpMapBaked) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(fpMapBaked, 0, 0, fpMapBaked.width, fpMapBaked.height, ox, oy, fw, fh);
+    }
+
+    // Field boundary, for a quick sense of extent and where the edges are. This
+    // replaces a fixed vertical midline, which encoded a two-team left/right
+    // split that is meaningless on a four-team board.
+    fieldBoundaryPath(ctx, ox, oy, fw, fh);
+    ctx.strokeStyle = 'rgba(242,232,216,0.16)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // POV vision wedge (cone + bubble), un-fogged. aimBrads: 0 = east, CCW+, and
+    // screen-y grows downward so we negate the angle.
+    var here = m.here;
+    if (here && here.alive !== false) {
+      var ax = px(here.x), ay = py(here.y);
+      var aim = (here.aim / 256) * Math.PI * 2;   // brads → radians
+      var half = (here.coneDeg || 60) * Math.PI / 180;
+      var reach = Math.hypot(W, H);               // cone is unlimited range: fill
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.arc(ax, ay, reach, -aim - half, -aim + half);
+      ctx.closePath();
+      var amber = ctx.createRadialGradient(ax, ay, 0, ax, ay, reach);
+      amber.addColorStop(0, 'rgba(232,163,61,0.34)');
+      amber.addColorStop(1, 'rgba(232,163,61,0)');
+      ctx.fillStyle = amber;
+      ctx.fill();
+      // omni bubble
+      ctx.beginPath();
+      ctx.arc(ax, ay, (here.bubble || 0) * sc, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(232,163,61,0.14)';
+      ctx.fill();
+      // aim ray
+      ctx.strokeStyle = 'rgba(232,163,61,0.7)';
+      ctx.lineWidth = Math.max(1, H * 0.02);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax + Math.cos(-aim) * reach, ay + Math.sin(-aim) * reach);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // hearts (behind players)
+    (m.hearts || []).forEach(function (ht) {
+      var col = teamCol(ht.team) || AMBER;
+      var hx = px(ht.x), hy = py(ht.y);
+      ctx.save();
+      ctx.fillStyle = col;
+      ctx.strokeStyle = 'rgba(12,8,5,0.8)';
+      ctx.lineWidth = 1;
+      heartPath(ctx, hx, hy, Math.max(3, H * 0.05));
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    });
+
+    // pickups as small dots
+    (m.items || []).forEach(function (it) {
+      var c = { grenade: '#7fae55', medkit: '#f2e8d8', shield: '#6fa8d6', spray: '#c8503f' }[it.item] || AMBER;
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(px(it.x), py(it.y), Math.max(1.4, H * 0.022), 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // players: team-tinted dots; the POV seat gets an amber ring; carriers a pip
+    (m.players || []).forEach(function (p) {
+      var col = teamCol(p.team) || PAPER;
+      var x = px(p.x), y = py(p.y);
+      var r = Math.max(2, H * (p.self ? 0.045 : 0.035));
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(12,8,5,0.85)';
+      ctx.stroke();
+      if (p.self) {
+        ctx.strokeStyle = AMBER;
+        ctx.lineWidth = Math.max(1, H * 0.02);
+        ctx.beginPath();
+        ctx.arc(x, y, r + Math.max(2, H * 0.035), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (p.carry) {
+        ctx.fillStyle = AMBER;
+        ctx.beginPath();
+        ctx.arc(x, y - r - Math.max(2, H * 0.03), Math.max(1.2, H * 0.02), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
   }
 
   function renderMismatch(s) {
@@ -4076,10 +4253,8 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     teamCol: teamCol, activeTeams: activeTeams, teamOf: teamOf,
     teamName: teamName, rosterName: rosterName, shortName: shortName,
     pushFeed: pushFeed, banner: banner, togglePov: togglePov,
-    core: core,
     getState: function () { return lastState; }
   };
-  window.NETHACK_CTX = PB_CTX;
   if (window.NethackChrome) window.NethackChrome.install(PB_CTX);
 
   relayout();
@@ -4122,11 +4297,8 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
 }
 /* The alias is the in-world name and the plate name is the REAL policy name:
    both must fit, and neither may collapse to a bare "…". The alias yields
-   first, because a spectator can read it off the terminal panel's caption.
-   The wider floor is scoped OUT of .tiny: at the 360px featured-match width
-   the floor is exactly the 3.2em the acceptance checklist pins, so the rule
-   above is the one that decides. */
-#stage:not(.tiny) .plate .plate-name { min-width: 4.5em; }
+   first, because a spectator can read it off the terminal panel's caption. */
+.plate .plate-name { min-width: 4.5em; }
 .plate .nh-alias {
   font-family: var(--finefont);
   font-size: calc(7.5 * var(--u));
@@ -4342,20 +4514,9 @@ button.beat-marker {
    reserved from the cap the server enforces (MaxSayRunes = 140) rather than
    guessed — 140 runes at this size is at most four wrapped lines, and the row
    is allowed exactly that much height whether or not anything is speaking. */
-.feed-row.nh-say-row,
-.feed-row.nh-plan-row {
-  /* A sentence, not a label: the row is bounded by the feed's own column and
-     WRAPS inside it. The starter's rows are nowrap and content-sized, which
-     would grow a 140-rune remark leftward off the frame. */
-  max-width: 100%;
-  white-space: normal;
-}
 .feed-row.nh-say-row {
   align-items: flex-start;
-  /* The band a full-cap remark needs, reserved from MaxSayRunes = 140 at this
-     row's own font size and column width — about four wrapped lines — so the
-     feed does not jump when a remark lands. */
-  min-height: calc(34 * var(--u));
+  min-height: calc(13 * var(--u));
 }
 .feed-row.nh-say-row .nh-who {
   font-family: var(--finefont);
@@ -4368,6 +4529,7 @@ button.beat-marker {
   color: var(--amber);
   white-space: normal;
   overflow-wrap: anywhere;
+  max-height: calc(52 * var(--u));
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -4480,10 +4642,7 @@ button.beat-marker {
   // Every feed row and beat nethack produces. Returns true when the event was
   // handled here, so the inherited switch never doubles it.
   function nhEvent(e, s, ctx) {
-    // The context is installed once and only replaced when the page hands a
-    // new one over, so tools/ci/renderer_fixture.html can drive these exact
-    // entry points with the page's OWN context rather than a stub.
-    if (ctx) CTX = ctx;
+    CTX = ctx;
     if (BEAT_KINDS[e.k]) {
       nhBeat(s, e.t, e.k, beatLabelFor(e) + ' — click to jump here');
     }
@@ -4650,58 +4809,17 @@ button.beat-marker {
     }
     var nh = s.nh || {};
     var tiny = $('stage') && $('stage').classList.contains('tiny');
-    var rows = (tiny ? [] : (nh.map || [])).slice();
+    var rows = tiny ? [] : (nh.map || []);
     var messages = nh.messages || [];
     var message = messages.length ? messages[messages.length - 1] : '';
     var body = rows.join('\n');
-    // The panel is draggable and resizable, so its box is not knowable from
-    // CSS alone: measure it. The glyph size comes from the measured width so
-    // all 48 columns fit, and any row that would not fit the measured height
-    // is DROPPED rather than drawn outside the panel — which is what keeps
-    // the terminal honest under --strict-text-bounds at every width.
-    var key = body + '|' + message + '|' + (nh.status || '') + '|' +
-      pre.clientWidth + 'x' + pre.clientHeight;
+    var key = body + '|' + message + '|' + (nh.status || '');
     if (pre._key === key) return;
     pre._key = key;
-    var status = nh.status || '';
-    var longest = Math.max(message.length, status.length,
-                           rows.length ? rows[0].length : 0);
-    var cols = longest;
-    var writeRows = function (list, width) {
-      var clip = function (line) {
-        return (width > 0 && line.length > width) ? line.slice(0, width) : line;
-      };
-      pre.innerHTML =
-        (list.length ? CTX.esc(list.map(clip).join('\n')) + '\n' : '') +
-        '<span class="msg">' + CTX.esc(clip(message)) + '</span>\n' +
-        '<span class="stat">' + CTX.esc(clip(status)) + '</span>';
-    };
-    pre.style.fontSize = '';
-    writeRows(rows, cols);
-    // 1. the glyph size comes from the measured width, down to a legible floor
-    if (pre.clientWidth > 0 && pre.scrollWidth > pre.clientWidth) {
-      var base = parseFloat(window.getComputedStyle(pre).fontSize) || 10;
-      var fitted = Math.max(5, base * pre.clientWidth / pre.scrollWidth);
-      pre.style.fontSize = (Math.floor(fitted * 10) / 10) + 'px';
-      writeRows(rows, cols);
-    }
-    // 2. below the floor there are simply not enough columns in the box: drop
-    //    the ones that do not fit rather than draw them outside it
-    var wide = 0;
-    while (cols > 4 && pre.clientWidth > 0 &&
-           pre.scrollWidth > pre.clientWidth && wide < 8) {
-      wide += 1;
-      cols = Math.max(4, Math.floor(cols * pre.clientWidth / pre.scrollWidth));
-      writeRows(rows, cols);
-    }
-    // 3. and the rows that do not fit the measured height go the same way
-    var guard = 0;
-    while (rows.length > 0 && pre.clientHeight > 0 &&
-           pre.scrollHeight > pre.clientHeight && guard < 64) {
-      guard += 1;
-      rows.pop();
-      writeRows(rows, cols);
-    }
+    pre.innerHTML =
+      (body ? CTX.esc(body) + '\n' : '') +
+      '<span class="msg">' + CTX.esc(message) + '</span>\n' +
+      '<span class="stat">' + CTX.esc(nh.status || '') + '</span>';
     var nameEl = $('fpv-name');
     if (nameEl) {
       var line = 'ALPHA THE DIGGER · DLVL ' + (nh.depth || 1);
@@ -4766,26 +4884,9 @@ button.beat-marker {
     }
   }
 
-  // The camera follows the cog. broadcast_core clamps the fit so a cell is
-  // never smaller than 12 css px, so below ~600px the board is LARGER than
-  // the frame and this is what keeps the cog inside it — the panning board
-  // the design note's "Legible at 360 px" describes, and the reason the
-  // classic #viewpanel (zoom bar + minimap) is kept rather than removed.
-  // panTo is the core's own API and clamps to the board edges; at desktop
-  // width, where the whole level fits, it re-centres on the same point.
-  function followCog(s) {
-    var nh = s.nh || {};
-    var core = CTX && CTX.core;
-    if (!core || typeof core.panTo !== 'function') return;
-    if (!(nh.cx >= 0) || !(nh.cy >= 0)) return;
-    var cell = (window.NETHACK_WIRE && window.NETHACK_WIRE.cell) || 18;
-    core.panTo((nh.cx + 0.5) * cell, (nh.cy + 0.5) * cell);
-  }
-
   function nhFrame(s, ctx, jumped) {
-    if (ctx) CTX = ctx;
+    CTX = ctx;
     if (jumped) { placed = {}; lastEnd = ''; }
-    followCog(s);
     renderDungeonClock(s);
     renderDeeds(s);
     renderLadder(s);
@@ -4804,14 +4905,10 @@ button.beat-marker {
   }
 
   window.NethackChrome = {
-    install: function (ctx) { if (ctx) CTX = ctx; },
+    install: function (ctx) { CTX = ctx; },
     frame: nhFrame,
     event: nhEvent
   };
-  // This block is parsed after the page's own script, so the page cannot call
-  // install() synchronously; it publishes the context instead and the block
-  // picks it up here. The page still passes it to every frame()/event() call.
-  if (window.NETHACK_CTX) window.NethackChrome.install(window.NETHACK_CTX);
 })();
 </script>
 
