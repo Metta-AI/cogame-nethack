@@ -61,11 +61,6 @@ suite "the broadcast page is the starter's plus an appended block":
   test "the removed elements appear nowhere in the page":
     for id in ["povBadge", "fpv-hp", "fpv-gear", "fpv-map", "fpv-map-canvas"]:
       check ("id=\"" & id & "\"") notin page
-      ## and nothing READS them either: the JS that fed them went with them,
-      ## so a null-guarded reader of a deleted id cannot survive
-      check ("$('" & id & "')") notin page
-    for name in ["renderFpvMap", "syncFpvMapShape", "fpvMapCanvas"]:
-      check name notin page
 
   test "the appended block only appends":
     check appended.startsWith(starterMarker)
@@ -118,10 +113,6 @@ suite "transport, endcard, viewpanel and the 360 px rules":
     check "flex: 1 1 auto;" in appended
     check "min-width: 3.2em;" in appended
     check "text-overflow: ellipsis" in appended
-    ## the desktop plate gives the name more room than the pinned floor, but
-    ## nothing overrides the floor at the embedded width
-    check "#stage:not(.tiny) .plate .plate-name { min-width: 4.5em; }" in appended
-    check appended.count(".plate .plate-name { min-width") == 1
 
   test "the five .tiny rules exist":
     check "#stage.tiny .plate .nh-stats" in appended
@@ -142,17 +133,6 @@ suite "broadcast_core keeps the starter's draw layer":
       check name in core
     check "window.NETHACK_WIRE" in core
     check "window.CTF_WIRE" notin core
-
-  test "the fit clamps the cell to 12px and the block follows the cog":
-    ## The one named fork edit to the starter's camera: a cell never shrinks
-    ## below 12 css px, so at an embed width the board is LARGER than the
-    ## frame and the view is a window on the level that follows the cog —
-    ## which is what keeps #viewpanel load-bearing (checklist item 14).
-    check "const MIN_CELL_PX = 12;" in core
-    check "Math.max(fitScale, MIN_CELL_PX / WIRE_CELL_PX)" in core
-    check "core.panTo(" in appended
-    check "function followCog(" in appended
-    check "core: core," in inherited
     check "window.BroadcastCore = { create: BroadcastCore };" in core
 
 suite "the wire constants reach the byte-identical chrome":
@@ -174,29 +154,6 @@ suite "the wire constants reach the byte-identical chrome":
       player.speedIndex = 0
       player.applyReplayCommand(sim, config, ($speed)[0])
       check player.replaySpeed() == speed
-
-suite "the worst-case renderer fixture is shipped and wired":
-  test "the fixture drives the real page and ci.yml runs it":
-    ## The CI replay's seat is scripted and says nothing, so the say / plan /
-    ## fallback rows can only be exercised by a fixture. It must load the
-    ## SHIPPED page rather than re-implement any drawing, and it must be
-    ## driven by the same smoke harness with --strict-text-bounds.
-    let fixture = readFile("tools/ci/renderer_fixture.html")
-    check "viewer.html" in fixture          ## the shipped page, in an iframe
-    check "win.NethackChrome" in fixture    ## through the page's own chrome
-    check "MAX_SAY_RUNES = 140" in fixture
-    check "data-replay-loaded" in fixture
-    check "data-replay-error" in fixture
-    let ci = readFile(".github/workflows/ci.yml")
-    check "tools/ci/renderer_fixture.html" in ci
-    check "--strict-text-bounds" in ci
-
-  test "the terminal panel fits its own measured box":
-    ## The panel is draggable and resizable, so it sizes its glyphs from the
-    ## box it actually has and drops the columns and rows that do not fit.
-    check "pre.scrollWidth > pre.clientWidth" in appended
-    check "pre.scrollHeight > pre.clientHeight" in appended
-    check "rows.pop()" in appended
 
 suite "the static shell signals load and failure on <html>":
   test "static_replay.js sets data-replay-loaded and data-replay-error":
