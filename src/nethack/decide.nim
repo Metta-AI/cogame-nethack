@@ -206,7 +206,7 @@ proc turn*(
       reply.source = dsLlm
       reply.latencyMs = latency
       inc sim.llmTurns
-      sim.repliesRepaired += reply.dropped
+      sim.repliesRepaired += reply.repaired
       result.reply = reply
       return
     except CatchableError as error:
