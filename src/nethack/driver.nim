@@ -89,6 +89,20 @@ proc beginTurn*(sim: var SimServer, actions: seq[Action], dropped: int): TurnRun
   if li < sim.levelTurns.len:
     inc sim.levelTurns[li]
   sim.emit("turn", %*{"n": sim.turnsPlayed, "depth": sim.cog.depth})
+  ## The three records that show a spectator the POLICY rather than the cog.
+  ## All three are derived from state the turn already carries, so they cost
+  ## no replay bytes and are identical live and in replay: the live server
+  ## and the replay player both set `lastSay` / `lastFallbackCause` before
+  ## this proc and both hand it the same actions.
+  var verbs = newJArray()
+  for action in actions:
+    verbs.add(%($action.verb))
+  sim.emit("plan", %*{"n": sim.turnsPlayed, "verbs": verbs,
+                      "truncated": plan.truncated, "dropped": dropped})
+  if sim.lastFallbackCause.len > 0:
+    sim.emit("fallback", %*{"cause": sim.lastFallbackCause})
+  if sim.lastSay.len > 0:
+    sim.emit("say", %*{"text": sim.lastSay})
   result = TurnRunner(ticksLeft: sim.config.turnTicks,
                       beforeDepth: sim.cog.depth, active: true,
                       emptyPlan: plan.queue.len == 0)

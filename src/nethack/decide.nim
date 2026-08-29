@@ -128,7 +128,7 @@ proc turn*(
   engine: var DecisionEngine,
   sim: var SimServer,
   turnIndex, elapsedSeconds: int
-): tuple[reply: ParsedReply, records: seq[string]] =
+): tuple[reply: ParsedReply, records: seq[string], cause: string] =
   ## Runs ONE decision turn. Never raises: every failure path ends in a legal
   ## plan.
   let
@@ -153,6 +153,7 @@ proc turn*(
   if engine.llmOff or engine.client.disabled:
     let cause = if engine.llmOff: "budget_guard" else: "no_credentials"
     result.reply = engine.delverReply(sim)
+    result.cause = cause
     inc sim.fallbackTurns
     result.records.add(fallbackRecord(turnIndex, 1, cause,
       "the LLM is unavailable for this turn; playing delver"))
@@ -162,6 +163,7 @@ proc turn*(
 
   if engine.recentRequests() >= RateGuardWindowRequests:
     result.reply = engine.delverReply(sim)
+    result.cause = "rate_guard"
     inc sim.fallbackTurns
     result.records.add(fallbackRecord(turnIndex, 1, "rate_guard",
       "the trailing-60s request count would breach the provider cap"))
@@ -245,6 +247,7 @@ proc turn*(
       "no_credentials"
     elif engine.client.throttled: "rate_guard"
     else: lastCause
+  result.cause = cause
   result.records.add(fallbackRecord(turnIndex, 2, cause,
     "seat fell back to the delver plan: " & lastDetail))
   echo "nethack llm: seat falling back to delver (", cause, ") on turn ",

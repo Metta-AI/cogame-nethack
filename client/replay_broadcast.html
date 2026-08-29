@@ -4509,6 +4509,34 @@ button.beat-marker {
 /* --- feed rows ---------------------------------------------------------- */
 .feed-row .nh-say { color: var(--amber); }
 .feed-row .nh-note { color: var(--paper-dim); letter-spacing: 0.06em; }
+/* The model's own words. A `say` is a SENTENCE, not a label: the row wraps
+   inside the feed's width instead of ellipsising, and the band it needs is
+   reserved from the cap the server enforces (MaxSayRunes = 140) rather than
+   guessed — 140 runes at this size is at most four wrapped lines, and the row
+   is allowed exactly that much height whether or not anything is speaking. */
+.feed-row.nh-say-row {
+  align-items: flex-start;
+  min-height: calc(13 * var(--u));
+}
+.feed-row.nh-say-row .nh-who {
+  font-family: var(--finefont);
+  letter-spacing: 0.14em;
+  color: var(--paper-dim);
+  flex: none;
+  margin-right: calc(5 * var(--u));
+}
+.feed-row.nh-say-row .nh-say-text {
+  color: var(--amber);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-height: calc(52 * var(--u));
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.feed-row.nh-plan-row .nh-note {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 
 /* --- endcard: the tombstone -------------------------------------------- */
 #ec-headline .nh-stone {
@@ -4642,7 +4670,7 @@ button.beat-marker {
         feedRow('PICKED UP ' + badge(String(e.name || '').toUpperCase()));
         return true;
       case 'eat':
-        feedRow('ATE ' + badge('A RATION'));
+        feedRow('ATE ' + badge(String(e.name || 'a ration').toUpperCase()));
         return true;
       case 'quaff':
         feedRow('DRANK THE ' + CTX.esc(String(e.appearance || '').toUpperCase()) +
@@ -4676,6 +4704,24 @@ button.beat-marker {
         feedRow('<span class="nh-note">MISSED THE CALL — DELVER PLAN (' +
           CTX.esc(String(e.cause || '')) + ')</span>');
         return true;
+      // The two rows where a spectator sees the LLM playing: what the cog
+      // said, and what it asked for. Both are DOM text inside the feed's own
+      // box, so a full-cap 140-rune remark wraps inside the row rather than
+      // being drawn past an edge (tools/ci/renderer_fixture.html measures
+      // exactly this at 360, 640 and 1280 px).
+      case 'say':
+        if (!e.text) return true;
+        feedRow('<span class="nh-who">ALPHA</span>' +
+          '<span class="nh-say-text">\u201c' + CTX.esc(String(e.text)) +
+          '\u201d</span>', 'nh-say-row');
+        return true;
+      case 'plan':
+        if (!e.verbs || !e.verbs.length) return true;
+        feedRow('<span class="nh-note">PLAN ' + e.n + ' — ' +
+          CTX.esc(e.verbs.join(' \u00b7 ').toUpperCase()) +
+          (e.dropped ? ' (' + e.dropped + ' DROPPED)' : '') +
+          (e.truncated ? ' (TRUNCATED)' : '') + '</span>', 'nh-plan-row');
+        return true;
       case 'death':
         CTX.banner('ALPHA THE DIGGER, KILLED BY ' +
           String(e.killer || 'THE DUNGEON').toUpperCase() +
@@ -4691,7 +4737,6 @@ button.beat-marker {
         CTX.banner('ESCAPED THE DUNGEON', 'amb');
         return true;
       case 'turn':
-      case 'plan':
       case 'end':
         return true;
     }

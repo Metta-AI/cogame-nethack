@@ -53,6 +53,74 @@ suite "record then re-derive, every end reason":
       check player.checkReplayHash() == -1
       check sim.tickCount == episode.sim.tickCount
 
+suite "the policy's own turn records reach the feed":
+  test "say, plan and fallback are derived live and re-derived on playback":
+    ## The three events that show a spectator the LLM playing. They are
+    ## DERIVED from turn state, so they cost no replay bytes — which only
+    ## works if the recorded chat records carry enough for playback to derive
+    ## exactly the same ones. This asserts both halves against each other.
+    let path = tempReplayPath("say")
+    var config = defaultGameConfig()
+    config.seed = 31337
+    var s = initSimServer(config)
+    s.phase = Playing
+    s.playerName = "loremaster"
+    var writer = openReplayWriter(path, config.configJson())
+    defer: removeFile(path)
+    writer.writeJoin(tickTime(0), 0, s.playerName, 0, "")
+    writer.writeChat(tickTime(0), 0,
+      registerRecord(0, "Alpha", s.playerName, "llm", ""))
+    let remark = "rat first, then the gold, then the closed door west"
+    var reply = ParsedReply(
+      actions: @[Action(verb: vSearch, item: -1),
+                 Action(verb: vWait, item: -1)],
+      say: sanitizeSay(remark), source: dsFallback)
+    ## the server writes the turn's fallback record BEFORE its directive
+    writer.writeChat(tickTime(0), 0,
+      fallbackRecord(1, 2, "timeout", "seat fell back to the delver plan"))
+    s.lastSay = reply.say
+    s.lastFallbackCause = "timeout"
+    var runner = s.beginTurn(reply.actions, 0)
+    var recorded: seq[JsonNode] = @[]
+    for event in s.events:
+      recorded.add(event)
+    while not s.turnDone(runner):
+      s.stepTurn(runner)
+      writer.writeHash(tickTime(s.tickCount), s.gameHash())
+    s.endTurn()
+    writer.writeChat(tickTime(s.tickCount), 0,
+      boundedDirectiveRecord(reply, 1, s.cog.depth, 0, "Alpha", s.lastExecuted,
+                             s.lastTruncated, s.lastDropped, s.lastUnreachable,
+                             s.observationJson(1, includeMap = false)))
+    s.endRun(erTurnCap, codNone, "")
+    writer.writeChat(tickTime(s.tickCount), 0, resultRecord(s))
+    writer.closeReplayWriter()
+
+    proc pick(events: seq[JsonNode], kind: string): JsonNode =
+      for event in events:
+        if event{"k"}.getStr() == kind:
+          return event
+      nil
+
+    check pick(recorded, "say"){"text"}.getStr() == remark
+    check pick(recorded, "fallback"){"cause"}.getStr() == "timeout"
+    check pick(recorded, "plan"){"verbs"}.len == 2
+    check pick(recorded, "plan"){"verbs"}[0].getStr() == "search"
+
+    var (sim, player, cfg) = replaySim(path)
+    var derived: seq[JsonNode] = @[]
+    var guard = 0
+    while not sim.ended and guard < 20_000:
+      inc guard
+      player.stepReplay(sim)
+      for event in sim.events:
+        derived.add(event)
+      sim.events.setLen(0)
+    check player.checkReplayHash() == -1
+    check pick(derived, "say"){"text"}.getStr() == remark
+    check pick(derived, "fallback"){"cause"}.getStr() == "timeout"
+    check pick(derived, "plan"){"verbs"}[0].getStr() == "search"
+
 suite "the replay is self-sufficient":
   test "the bytes alone carry the name, the alias, the config and the result":
     let path = tempReplayPath("self")

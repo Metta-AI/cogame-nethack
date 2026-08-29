@@ -43,6 +43,10 @@ type
     dropped*: int
     say*: string
     source*: string
+    cause*: string
+      ## The cause of the turn's fallback, read off the `fallback` chat
+      ## records that precede this turn's directive record. It is what lets
+      ## playback derive the same `fallback` event the live game emitted.
 
   ReplayPlayer* = object
     data*: ReplayData
@@ -116,9 +120,20 @@ proc initReplayPlayer*(data: ReplayData): ReplayPlayer =
   result.looping = true
   result.skipLulls = true
   result.startTick = 0
+  var pendingCause = ""
   for record in result.records:
     case record{"k"}.getStr()
-    of "directive": result.plans.add(planFor(record))
+    of "fallback":
+      ## The records for a turn are written BEFORE its directive record, so
+      ## the cause of a turn that fell back is the last one seen since the
+      ## previous directive.
+      pendingCause = record{"cause"}.getStr()
+    of "directive":
+      var plan = planFor(record)
+      if plan.source == "fallback":
+        plan.cause = pendingCause
+      pendingCause = ""
+      result.plans.add(plan)
     of "stop":
       result.stopTick = record{"tick"}.getInt()
       result.stopRule = record{"endRule"}.getStr()
@@ -158,8 +173,12 @@ proc stepReplay*(replay: var ReplayPlayer, sim: var SimServer) =
       return
     let plan = replay.plans[replay.turnIndex]
     inc replay.turnIndex
-    replay.runner = sim.beginTurn(plan.actions, plan.dropped)
+    ## Both fields are read by `beginTurn` when it derives this turn's `say`
+    ## and `fallback` events, so they are set BEFORE it, exactly as the live
+    ## server sets them before its own call.
     sim.lastSay = plan.say
+    sim.lastFallbackCause = plan.cause
+    replay.runner = sim.beginTurn(plan.actions, plan.dropped)
   sim.stepTurn(replay.runner)
   replay.applyStop(sim)
   if replay.hashIndex < replay.data.hashes.len:
