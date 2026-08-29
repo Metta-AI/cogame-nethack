@@ -22,7 +22,15 @@ const WireConstantsJs* =
   ",cell:" & $CellPx &
   ",levelW:" & $LevelW &
   ",levelH:" & $LevelH &
-  "};"
+  "};window.CTF_WIRE=window.NETHACK_WIRE;"
+    ## The fork renamed the wire global, but `client/chrome_common.js` is kept
+    ## BYTE-IDENTICAL to the starter's and reads `window.CTF_WIRE` for the
+    ## speed chips and the presentation fps. Without the alias it fell back to
+    ## the starter's [1,2,3,4,8,16], so the transport drew six chips of which
+    ## `3x` and `16x` sent commands `replays.applySpeedCommand` does not
+    ## handle and no chip could ever highlight. The alias is the one-line fix
+    ## that keeps the byte pin intact: both names point at the same object, so
+    ## the chips are this game's own PlaybackSpeeds.
 
 const WireConstantsMarker* = "<!-- WIRE_CONSTANTS -->"
 

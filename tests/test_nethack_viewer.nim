@@ -4,6 +4,8 @@
 
 import std/[os, osproc, strutils, unittest]
 
+import nethack/[sim, replays, wire_constants]
+
 const ChromeCommonSha256 =
   "7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c"
 
@@ -132,6 +134,26 @@ suite "broadcast_core keeps the starter's draw layer":
     check "window.NETHACK_WIRE" in core
     check "window.CTF_WIRE" notin core
     check "window.BroadcastCore = { create: BroadcastCore };" in core
+
+suite "the wire constants reach the byte-identical chrome":
+  test "both wire globals are defined, and the chips are PlaybackSpeeds":
+    ## chrome_common.js is kept byte-identical and reads `window.CTF_WIRE`,
+    ## so the renamed global is published under BOTH names. Without the alias
+    ## the transport falls back to the starter's [1,2,3,4,8,16] and draws two
+    ## chips this game cannot obey.
+    check "window.NETHACK_WIRE={speeds:[1,2,4,8]" in WireConstantsJs
+    check WireConstantsJs.endsWith("window.CTF_WIRE=window.NETHACK_WIRE;")
+    check "window.CTF_WIRE" in chrome
+    check "WIRE.speeds" in chrome
+
+  test "every chip the chrome can draw is a speed the transport accepts":
+    var config = defaultGameConfig()
+    var sim = initSimServer(config)
+    var player = initReplayPlayer(ReplayData())
+    for speed in PlaybackSpeeds:
+      player.speedIndex = 0
+      player.applyReplayCommand(sim, config, ($speed)[0])
+      check player.replaySpeed() == speed
 
 suite "the static shell signals load and failure on <html>":
   test "static_replay.js sets data-replay-loaded and data-replay-error":
