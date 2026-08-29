@@ -45,6 +45,27 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Two commits: tools/ci/check_gameversion.sh compares this head's
+          # GameVersion against its base's, and a depth-1 checkout has no base
+          # to compare with.
+          fetch-depth: 2
+
+      # The three shipped guards that had no caller. A tool that is present,
+      # executable and never invoked is a tool that is not enforcing anything.
+      - name: Version discipline and the release-version picker
+        run: |
+          set -euo pipefail
+          test -x tools/ci/check_gameversion.sh || {
+            echo "::error::tools/ci/check_gameversion.sh must stay executable"; exit 1; }
+          if git rev-parse --verify --quiet HEAD~1 >/dev/null; then
+            ./tools/ci/check_gameversion.sh HEAD~1
+          else
+            echo "::error::no base commit in this checkout; the GameVersion" \
+                 "collision check cannot run"
+            exit 1
+          fi
+          python3 tools/ci/test_next_coworld_version.py
 
       - name: Cache nimby toolchain and nimcache
         uses: actions/cache@v4
@@ -148,6 +169,14 @@ jobs:
             done
           done
           exit "${fail}"
+
+      # The baseline's parameters are a swept pick, not a guess: this is the
+      # sweep's own --check, run against the committed
+      # tools/ci/baseline_tuning.json (acceptance-checklist item 7).
+      - name: The shipped baseline params are the swept pick
+        run: |
+          set -euo pipefail
+          nim c -r --hints:off -d:release --path:src tools/tune_baselines.nim --check
 
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs
