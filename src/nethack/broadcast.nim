@@ -158,7 +158,8 @@ proc buildStateJson*(
   sim: var SimServer,
   events: JsonNode,
   playing: bool,
-  speed, maxTick: int,
+  speed: float,
+  maxTick: int,
   looping, transportEnabled: bool,
   mismatchTick, startTick, endHoldSeconds: int,
   skipLulls, fastForwarding: bool,
@@ -168,7 +169,9 @@ proc buildStateJson*(
 ): string =
   ## Assembles the broadcast chrome frame. Board-derived STATE is always
   ## present, so even a frame reached by a seek hydrates the scorebug, the
-  ## terminal panel and the endcard with no events.
+  ## terminal panel and the endcard with no events. `speed` is fractional so
+  ## the replay transport can report its 1/2x crawl as 0.5 — the chrome
+  ## lights the speed chip whose own value equals this field.
   var state = %*{
     "t": sim.tickCount,
     "mt": max(1, sim.config.maxTicks),

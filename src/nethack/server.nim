@@ -478,8 +478,8 @@ proc runServerLoop*(
                 var nextState = state
                 var packet = sim.buildBoardPacket(state, nextState)
                 packet.addChrome(sim.buildStateJson(
-                  newJArray(), false, 1, max(1, config.maxTicks), false, false,
-                  -1, 0, 0, false, false))
+                  newJArray(), false, 1.0, max(1, config.maxTicks), false,
+                  false, -1, 0, 0, false, false))
                 packets.add(packet)
                 state = nextState
           for packet in packets:
@@ -536,8 +536,8 @@ proc runServerLoop*(
               var nextState = state
               var packet = sim.buildBoardPacket(state, nextState)
               packet.addChrome(sim.buildStateJson(
-                events, true, 1, max(1, sim.tickCount), false, true, -1, 0, 0,
-                false, false))
+                events, true, 1.0, max(1, sim.tickCount), false, true, -1, 0,
+                0, false, false))
               packets.add(packet)
               state = nextState
         for packet in packets:

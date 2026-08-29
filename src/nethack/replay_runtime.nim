@@ -74,6 +74,9 @@ proc advanceReplayFrame*(
   commands: openArray[char]
 ): JsonNode =
   ## Applies viewer controls and advances one presentation frame.
+  ## The 1/2x parity flips once per frame — first, so it counts frames the
+  ## viewer actually saw rather than the ticks playback happened to spend.
+  replay.halfPhase = not replay.halfPhase
   var didSeek = false
   for seekTick in seekTicks:
     replay.seekReplay(sim, config, seekTick)
@@ -90,11 +93,8 @@ proc advanceReplayFrame*(
   if replay.playing and not sim.ended:
     ## ONE TICK PER TWO ANIMATION FRAMES at 1x, so a dungeon step glides
     ## rather than snapping and a short run is still watchable: a 2 200-tick
-    ## episode plays for ~183 s at 1x and 23 s at 8x.
-    var speed = replay.replaySpeed()
-    if replay.skipLulls and replay.isLullTick(sim.tickCount):
-      speed = min(MaxLullTicksPerFrame, speed * LullSpeedBoost)
-    replay.tickAccumulator += speed
+    ## episode plays for ~183 s at 1x and 23 s at 8x (366 s at 1/2x).
+    replay.tickAccumulator += replay.replayStepBudget(sim.tickCount)
     let ticks = replay.tickAccumulator div 2
     replay.tickAccumulator = replay.tickAccumulator mod 2
     for _ in 0 ..< ticks:
@@ -124,7 +124,7 @@ proc buildReplayViewerPacket*(
   result.addChrome(sim.buildStateJson(
     events,
     replay.playing,
-    replay.replaySpeed(),
+    replay.replayDisplaySpeed(),
     replay.replayMaxTick(),
     replay.looping,
     true,

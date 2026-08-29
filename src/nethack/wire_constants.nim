@@ -16,7 +16,10 @@ proc jsIntArray(values: openArray[int]): string =
   result.add("]")
 
 const WireConstantsJs* =
-  "window.NETHACK_WIRE={speeds:" & jsIntArray(PlaybackSpeeds) &
+  # 0.5 is the replay-only half speed (ReplayHalfSpeedIndex, command '5');
+  # it rides ahead of the engine's integer PlaybackSpeeds rather than
+  # joining them, because the live loop has no fractional pace.
+  "window.NETHACK_WIRE={speeds:[0.5," & jsIntArray(PlaybackSpeeds)[1..^1] &
   ",fps:" & $TargetFps &
   ",chromeSpriteId:" & $BroadcastChromeSpriteId &
   ",cell:" & $CellPx &

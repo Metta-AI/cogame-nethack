@@ -1,4 +1,4 @@
-## Viewer tests, static over the shipped chrome files: the byte-identical
+## Viewer tests, static over the shipped chrome files: the byte-pinned
 ## chrome_common.js, the inherited-page-plus-appended-block shape, the alias
 ## discipline, the beat CSS, the transport rules and the 360 px rules.
 
@@ -7,7 +7,7 @@ import std/[os, osproc, strutils, unittest]
 import nethack/[sim, replays, wire_constants]
 
 const ChromeCommonSha256 =
-  "7ace7287e0d19bf0fddb2362c55e4d76dfb44adcd4fbc8d1743b0557ced72f7c"
+  "594ed4a72cd908922c982d0f3e3ffb04ae1d97568fcd5f5daa794042662a369c"
 
 let
   page = readFile("client/replay_broadcast.html")
@@ -27,16 +27,22 @@ proc sha256Hex(path: string): string =
   except CatchableError:
     result = ""
 
-suite "chrome_common is byte-identical to the starter's":
-  test "the file is 40 022 bytes and hashes to the pinned sha256":
-    check chrome.len == 40_022
+suite "chrome_common is the starter's plus the fleet transport patch":
+  test "the file is 40 037 bytes and hashes to the pinned sha256":
+    ## coworld-ctf's chrome_common.js, byte for byte, plus the fleet-wide
+    ## replay transport patch: the 0.5x entry in the speed fallback and in
+    ## the speed->command map. Nothing else in this file is edited or
+    ## reformatted — everything this game adds lives in the page's appended
+    ## block, and the CTF_WIRE lookup below stays as the starter wrote it.
+    check chrome.len == 40_037
     let hashed = sha256Hex("client/chrome_common.js")
     if hashed.len > 0:
       check hashed == ChromeCommonSha256
     else:
       ## no sha256sum on this host: the length pin still catches an edit
-      check chrome.len == 40_022
+      check chrome.len == 40_037
     check "window.ChromeCommon" in chrome
+    check "map = { 0.5: '5'," in chrome
 
 suite "the broadcast page is the starter's plus an appended block":
   test "the inherited half still carries the starter's structure":
@@ -155,13 +161,13 @@ suite "broadcast_core keeps the starter's draw layer":
     check "core: core," in inherited
     check "window.BroadcastCore = { create: BroadcastCore };" in core
 
-suite "the wire constants reach the byte-identical chrome":
+suite "the wire constants reach the byte-pinned chrome":
   test "both wire globals are defined, and the chips are PlaybackSpeeds":
-    ## chrome_common.js is kept byte-identical and reads `window.CTF_WIRE`,
-    ## so the renamed global is published under BOTH names. Without the alias
-    ## the transport falls back to the starter's [1,2,3,4,8,16] and draws two
-    ## chips this game cannot obey.
-    check "window.NETHACK_WIRE={speeds:[1,2,4,8]" in WireConstantsJs
+    ## chrome_common.js keeps the starter's `window.CTF_WIRE` lookup, so the
+    ## renamed global is published under BOTH names. Without the alias the
+    ## transport falls back to the starter's speed list and draws chips this
+    ## game cannot obey. The emitted list leads with the replay-only 0.5x.
+    check "window.NETHACK_WIRE={speeds:[0.5,1,2,4,8]" in WireConstantsJs
     check WireConstantsJs.endsWith("window.CTF_WIRE=window.NETHACK_WIRE;")
     check "window.CTF_WIRE" in chrome
     check "WIRE.speeds" in chrome
@@ -174,6 +180,25 @@ suite "the wire constants reach the byte-identical chrome":
       player.speedIndex = 0
       player.applyReplayCommand(sim, config, ($speed)[0])
       check player.replaySpeed() == speed
+      check player.replayDisplaySpeed() == float(speed)
+    ## the 0.5x chip the wire now emits ahead of PlaybackSpeeds: the chrome
+    ## maps it to command '5', and a chip only lights when the frame's `sp`
+    ## equals the chip's own value.
+    player.speedIndex = 0
+    player.applyReplayCommand(sim, config, '5')
+    check player.speedIndex == ReplayHalfSpeedIndex
+    check player.replayDisplaySpeed() == 0.5
+
+suite "the board page owns its own keyboard transport":
+  test "Space pauses on the shipped page and the digits reach the engine":
+    ## The static bundle ships exactly one page (Dockerfile.replay-viewer
+    ## renders replay_broadcast.html as index.html), so its own keydown
+    ## handler IS the fleet's Space-pauses requirement — there is no league
+    ## shell in this repo to forward through. The digit row carries '5', the
+    ## half-speed command, with no extra binding.
+    check "function togglePlay() { send(' '); }" in inherited
+    check "if (k === ' ') { ev.preventDefault(); togglePlay(); }" in inherited
+    check "else if (k >= '1' && k <= '9') send(k);" in inherited
 
 suite "the worst-case renderer fixture is shipped and wired":
   test "the fixture drives the real page and ci.yml runs it":
