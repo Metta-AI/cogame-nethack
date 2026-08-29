@@ -4253,6 +4253,7 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     teamCol: teamCol, activeTeams: activeTeams, teamOf: teamOf,
     teamName: teamName, rosterName: rosterName, shortName: shortName,
     pushFeed: pushFeed, banner: banner, togglePov: togglePov,
+    core: core,
     getState: function () { return lastState; }
   };
   if (window.NethackChrome) window.NethackChrome.install(PB_CTX);
@@ -4884,9 +4885,26 @@ button.beat-marker {
     }
   }
 
+  // The camera follows the cog. broadcast_core clamps the fit so a cell is
+  // never smaller than 12 css px, so below ~600px the board is LARGER than
+  // the frame and this is what keeps the cog inside it — the panning board
+  // the design note's "Legible at 360 px" describes, and the reason the
+  // classic #viewpanel (zoom bar + minimap) is kept rather than removed.
+  // panTo is the core's own API and clamps to the board edges; at desktop
+  // width, where the whole level fits, it re-centres on the same point.
+  function followCog(s) {
+    var nh = s.nh || {};
+    var core = CTX && CTX.core;
+    if (!core || typeof core.panTo !== 'function') return;
+    if (!(nh.cx >= 0) || !(nh.cy >= 0)) return;
+    var cell = (window.NETHACK_WIRE && window.NETHACK_WIRE.cell) || 18;
+    core.panTo((nh.cx + 0.5) * cell, (nh.cy + 0.5) * cell);
+  }
+
   function nhFrame(s, ctx, jumped) {
     CTX = ctx;
     if (jumped) { placed = {}; lastEnd = ''; }
+    followCog(s);
     renderDungeonClock(s);
     renderDeeds(s);
     renderLadder(s);

@@ -133,6 +133,17 @@ suite "broadcast_core keeps the starter's draw layer":
       check name in core
     check "window.NETHACK_WIRE" in core
     check "window.CTF_WIRE" notin core
+
+  test "the fit clamps the cell to 12px and the block follows the cog":
+    ## The one named fork edit to the starter's camera: a cell never shrinks
+    ## below 12 css px, so at an embed width the board is LARGER than the
+    ## frame and the view is a window on the level that follows the cog —
+    ## which is what keeps #viewpanel load-bearing (checklist item 14).
+    check "const MIN_CELL_PX = 12;" in core
+    check "Math.max(fitScale, MIN_CELL_PX / WIRE_CELL_PX)" in core
+    check "core.panTo(" in appended
+    check "function followCog(" in appended
+    check "core: core," in inherited
     check "window.BroadcastCore = { create: BroadcastCore };" in core
 
 suite "the wire constants reach the byte-identical chrome":

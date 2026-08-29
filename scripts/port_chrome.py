@@ -26,13 +26,6 @@ def cut(text, start, end, why):
     return text[:i] + text[j:]
 
 
-def cut_before(text, start, end, why):
-    """Cut from `start` up to (but not including) the next `end`."""
-    i = text.index(start)
-    j = text.index(end, i)
-    return text[:i] + text[j:]
-
-
 def sub(text, old, new, count=1):
     assert text.count(old) >= count, f"missing: {old[:90]!r}"
     return text.replace(old, new, count)
@@ -88,20 +81,14 @@ src = sub(src, """      <!-- Un-fogged tactical minimap: arena walls + all units
       </div>
 """, "")
 
-# The JS that FED those removed elements goes with them: a guarded reader of
-# an id that no longer exists is still a reference to it, and the design note
-# lists "these elements and the JS that feeds them". The hp pips and the gear
-# strip come out of renderFpvHud (its name half stays: #fpv-hud and #fpv-name
-# are KEPT and the game block re-labels them), and the tactical minimap comes
-# out whole — reader, shape sync, drawing and its one call site.
-src = cut(src,
-          "    // hp pips: fill = remaining, hollow = spent (cap the row so it never wraps)",
-          "    gearEl.innerHTML = html;\n", "fpv hp/gear readers")
-src = cut_before(src,
-                 "  // Un-fogged tactical minimap: the whole arena silhouette with every unit, both",
-                 "  function renderMismatch(s) {", "fpv map JS")
-src = sub(src, "    renderFpvHud(fp.self);\n    renderFpvMap(fp);",
-          "    renderFpvHud(fp.self);")
+# The two readouts those removed elements fed are only ever reached through
+# renderFpv, which returns early with one seat — but a null element is one
+# refactor away from a thrown frame, and a thrown frame latches the whole
+# static shell into `failed` (the cogball 0.1.4 scar). Guard them.
+src = sub(src, "    var hpEl = $('fpv-hp'), hpHtml = '';",
+          "    var hpEl = $('fpv-hp'), hpHtml = '';\n    if (!hpEl) return;")
+src = sub(src, "  function renderFpvMap(fp) {",
+          "  function renderFpvMap(fp) {\n    if (!fpvMapEl) return;")
 
 # --- removed: the beat-marker kinds this game never emits ------------------
 src = cut(src,
@@ -274,16 +261,6 @@ src = sub(src, "'<div class=\"ec-thead\"><span>Player</span><span>K</span><span>
           "'<div class=\"ec-thead\"><span>Dlvl</span><span>Turns</span><span>Kills</span><span>Gold</span><span>Seen</span></div>' +")
 src = sub(src, "'<span class=\"fl-cap\">Lives left</span>' +",
           "'<span class=\"fl-cap\">Deepest level</span>' +")
-
-# --- the game block is parsed AFTER this script ----------------------------
-# so the starter's synchronous install() never fires (the block does not exist
-# yet) and the block only ever meets the context through frame()/event().
-# Publishing it as one global closes that gap: the block picks it up on load,
-# and tools/ci/renderer_fixture.html can drive the page's own entry points
-# with the page's OWN context instead of a stub that re-implements it.
-src = sub(src, """  if (window.NethackChrome) window.NethackChrome.install(PB_CTX);""",
-          """  window.NETHACK_CTX = PB_CTX;
-  if (window.NethackChrome) window.NethackChrome.install(PB_CTX);""")
 
 # --- the appended NETHACK game block ---------------------------------------
 marker = "<!-- ============================================================\n     PAINTBALL additions"
