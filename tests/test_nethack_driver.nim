@@ -226,9 +226,17 @@ suite "reply validation":
       mixed.add("\u{1F480}")
     check sanitizeNote(mixed).runeLen == MaxNoteRunes
     check sanitizeNote(mixed).validateUtf8() == -1
-    ## `say` is printable-ASCII filtered after the rune cut, so the emoji go
-    ## and the cut still never lands mid-codepoint.
-    check sanitizeSay(mixed) == "ok"
+    ## `say` is cut on a RUNE boundary at its own cap FIRST, with a 4-byte
+    ## emoji sitting exactly on the boundary, and only CONTROL characters are
+    ## filtered afterwards — every printable rune survives, whatever script
+    ## it is written in.
+    let said = sanitizeSay(mixed)
+    check said.runeLen == MaxSayRunes
+    check said.validateUtf8() == -1
+    check said.startsWith("ok ")
+    check "\u{1F480}" in said
+    check sanitizeSay("wei\u00DF \u4F60\u597D {json}") == "wei\u00DF \u4F60\u597D json"
+    check sanitizeSay("a\x01b\x7Fc") == "abc"
     check truncateRunes(emoji, MaxSayRunes).runeLen == MaxSayRunes
 
   test "tolerant extraction survives fences and trailing prose":

@@ -37,15 +37,20 @@ type
 
 proc sanitizeSay*(text: string): string =
   ## The cog thinking out loud: capped at MaxSayRunes on a rune boundary
-  ## FIRST, then filtered to printable characters. Braces are excluded
+  ## FIRST, then filtered of CONTROL characters only. Every printable rune
+  ## survives, whatever script it is written in — a `say` is a sentence a
+  ## spectator reads, and deleting every non-ASCII rune silently emptied the
+  ## line for any policy that did not write in English. Braces are excluded
   ## deliberately — the replay chat stream tells a control record from a
   ## cog's line by a leading '{'.
   result = ""
   for rune in text.truncateRunes(MaxSayRunes).runes:
     let value = int(rune)
-    if value >= 32 and value < 127 and value != ord('{') and
-        value != ord('}'):
-      result.add($rune)
+    if value < 32 or (value >= 127 and value < 160):
+      continue                      ## C0 / DEL / C1 control characters
+    if value == ord('{') or value == ord('}'):
+      continue
+    result.add($rune)
   result = result.strip()
 
 proc sanitizeNote*(text: string): string =
