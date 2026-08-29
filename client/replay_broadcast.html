@@ -4295,13 +4295,20 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The alias is the in-world name and the plate name is the REAL policy name:
+   both must fit, and neither may collapse to a bare "…". The alias yields
+   first, because a spectator can read it off the terminal panel's caption. */
+.plate .plate-name { min-width: 4.5em; }
 .plate .nh-alias {
   font-family: var(--finefont);
   font-size: calc(7.5 * var(--u));
   letter-spacing: 0.12em;
   color: var(--paper-dim);
   white-space: nowrap;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .plate .hungerchip {
   font-family: var(--pixfont);
