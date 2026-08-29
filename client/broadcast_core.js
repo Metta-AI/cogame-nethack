@@ -48,6 +48,19 @@
   const CHROME_SPRITE_ID =
     (window.NETHACK_WIRE && window.NETHACK_WIRE.chromeSpriteId) || 4090;
 
+  // NETHACK: the board is a 48x18 CELL grid composited server-side at
+  // NETHACK_WIRE.cell native px per cell, and a cell is the unit a spectator
+  // reads. Fitting the WHOLE level into the ~360px featured-match frame gives
+  // 360/48 = 7.5 css px per cell, which is illegible, so the fit never
+  // shrinks a cell below MIN_CELL_PX: under ~600px the board is LARGER than
+  // the frame, the view is a window on the level, and the page keeps the cog
+  // in it with panTo (design note -> Viewer -> Legible at 360 px, and the
+  // reason #viewpanel's zoom bar and minimap are kept). At desktop width the
+  // whole level fits at >= 12px per cell and this floor never binds.
+  const MIN_CELL_PX = 12;
+  const WIRE_CELL_PX =
+    Number(window.NETHACK_WIRE && window.NETHACK_WIRE.cell) || 0;
+
   function readU16(bytes, offset) {
     return bytes[offset] | (bytes[offset + 1] << 8);
   }
@@ -451,6 +464,12 @@
       const scaleX = cssW / nativeW;
       const scaleY = cssH / nativeH;
       fitScale = Math.min(scaleX, scaleY);
+      if (WIRE_CELL_PX > 0) {
+        // The cell floor. Above it this is the starter's letterboxed fit; at
+        // an embed width it makes the board bigger than the viewport, which
+        // is what clampView() then pans inside.
+        fitScale = Math.max(fitScale, MIN_CELL_PX / WIRE_CELL_PX);
+      }
       if (!(focusX > 0) || !(focusY > 0)) {
         focusX = nativeW / 2;
         focusY = nativeH / 2;

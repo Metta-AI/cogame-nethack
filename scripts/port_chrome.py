@@ -37,6 +37,15 @@ src = open(PATH, encoding="utf-8").read()
 assert "window.CtfStaticReplay" in src
 src = src.replace("window.CtfStaticReplay", "window.NethackStaticReplay")
 src = sub(src, "'ctf-shell'", "'nethack-shell'")
+
+# --- the game block needs the CORE to move the camera ----------------------
+# The board is larger than the frame below ~600px (broadcast_core's 12px cell
+# floor), so the appended block follows the cog with core.panTo. One name is
+# added to the context the starter already hands the block; nothing else in
+# PB_CTX changes.
+src = sub(src, """    pushFeed: pushFeed, banner: banner, togglePov: togglePov,""",
+          """    pushFeed: pushFeed, banner: banner, togglePov: togglePov,
+    core: core,""")
 src = src.replace("window.PaintballChrome", "window.NethackChrome")
 
 # --- removed: #povBadge and the togglePov wiring ---------------------------

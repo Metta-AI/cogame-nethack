@@ -106,6 +106,10 @@ proc nethackJson(sim: SimServer): JsonNode =
   %*{
     "depth": sim.cog.depth,
     "deepest": sim.depthReached,
+    # The cog's CELL, so the page can keep the camera on it when the board
+    # is larger than the frame (the 12px cell floor in broadcast_core.js).
+    "cx": sim.cog.x,
+    "cy": sim.cog.y,
     "levels": sim.config.dungeonLevels,
     "hp": max(0, sim.cog.hp),
     "maxhp": sim.cog.maxHp,
