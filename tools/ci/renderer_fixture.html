@@ -369,6 +369,15 @@
       '*, *::before, *::after { animation: none !important; ' +
       'transition: none !important; }';
     win.document.head.appendChild(settleStyle);
+    // Wait for the page's WEBFONTS. Its type has font-display: block, so a
+    // box measured before the swap is a box measured in fallback metrics —
+    // which is how a tombstone that fits locally ends up three pixels over
+    // its box in CI.
+    try {
+      if (win.document.fonts && win.document.fonts.ready) {
+        await win.document.fonts.ready;
+      }
+    } catch (ignore) { /* older engines: the waits below still settle it */ }
     // Let the replay actually load before touching anything: in CI the iframe
     // is booting the shipped wasm module against the smoke replay, and the
     // page's own frame loop is what takes the endcard down and ages feed rows

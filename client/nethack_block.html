@@ -744,6 +744,22 @@ button.beat-marker {
     }
   }
 
+  // The chrome's type is a webfont with font-display: block — it draws
+  // NOTHING until the file lands and then swaps in with different metrics.
+  // Anything measured before that swap was measured against fallback metrics:
+  // the terminal panel and the tombstone both size themselves from their own
+  // measured box, so both are invalidated once the fonts are ready and
+  // re-fitted on the next frame. (Observed in CI: a tombstone fitted against
+  // the fallback font sat three pixels over its box after the swap.)
+  if (document.fonts && document.fonts.ready &&
+      typeof document.fonts.ready.then === 'function') {
+    document.fonts.ready.then(function () {
+      lastEnd = '';
+      var pre = $('nh-term');
+      if (pre) pre._key = '';
+    });
+  }
+
   window.NethackChrome = {
     install: function (ctx) { if (ctx) CTX = ctx; },
     frame: nhFrame,
