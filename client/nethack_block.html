@@ -649,10 +649,21 @@ button.beat-marker {
     lastEnd = key;
     head.innerHTML = '<span class="nh-stone">' +
       headline.split(' / ').map(CTX.esc).join('<br>') + '</span>';
-    // Four lines of a bitmap font in a box the endcard lays out: measure and
-    // shrink until they fit, exactly as the terminal panel does. Shortening
-    // the lines is not an option — this is the death line, and a headstone
-    // that reads 'KILLED BY A HILL...' is worse than a smaller one.
+    var how = $('ec-how');
+    if (how) {
+      how.textContent = (nh.kills || 0) + ' monsters killed, ' + (nh.gold || 0) +
+        ' gold, ' + (nh.meals || 0) + ' meals, ' + (nh.kicks || 0) +
+        ' doors kicked, ' + (nh.seen || 0) + ' of ' + (nh.cells || 0) +
+        ' cells seen, ' + (nh.fallbacks || 0) + ' fallback turns';
+    }
+    // LAST, after every sibling in the endcard carries its text: the headline
+    // shares a flex column with the summary line, so writing the summary
+    // AFTER fitting the stone re-distributes the column and leaves the stone
+    // fitted to a box it no longer has (observed in CI: fitted in a 75px box,
+    // measured in a 72px one). Four lines of a bitmap font in a box the
+    // endcard lays out: measure and shrink until they fit, exactly as the
+    // terminal panel does. Shortening the lines is not an option — this is
+    // the death line, and 'KILLED BY A HILL...' is worse than smaller type.
     var stone = head.querySelector('.nh-stone');
     if (stone && head.clientHeight > 0) {
       stone.style.fontSize = '';
@@ -676,13 +687,6 @@ button.beat-marker {
         if (next < 6) { stone.style.fontSize = '6px'; break; }
         stone.style.fontSize = next + 'px';
       }
-    }
-    var how = $('ec-how');
-    if (how) {
-      how.textContent = (nh.kills || 0) + ' monsters killed, ' + (nh.gold || 0) +
-        ' gold, ' + (nh.meals || 0) + ' meals, ' + (nh.kicks || 0) +
-        ' doors kicked, ' + (nh.seen || 0) + ' of ' + (nh.cells || 0) +
-        ' cells seen, ' + (nh.fallbacks || 0) + ' fallback turns';
     }
   }
 
