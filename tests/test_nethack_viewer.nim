@@ -113,6 +113,10 @@ suite "transport, endcard, viewpanel and the 360 px rules":
     check "flex: 1 1 auto;" in appended
     check "min-width: 3.2em;" in appended
     check "text-overflow: ellipsis" in appended
+    ## the desktop plate gives the name more room than the pinned floor, but
+    ## nothing overrides the floor at the embedded width
+    check "#stage:not(.tiny) .plate .plate-name { min-width: 4.5em; }" in appended
+    check appended.count(".plate .plate-name { min-width") == 1
 
   test "the five .tiny rules exist":
     check "#stage.tiny .plate .nh-stats" in appended
