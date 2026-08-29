@@ -1,0 +1,15 @@
+# ONE service, because the manifest's image placeholder is derived from the
+# compose SERVICE NAME ({{NETHACK_IMAGE}}). One image, two entrypoints:
+# /bin/nethack (the game server, which also makes every LLM call) and
+# /bin/nethack-player (the thin seat registrar). The policy set is
+# env-switched inside this same image (PLAYER_PROMPT vs PLAYER_SCRIPTED),
+# which is what keeps a champion and a scripted filler byte-identical apart
+# from their environment.
+services:
+  nethack:
+    image: coworld-nethack:latest
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host

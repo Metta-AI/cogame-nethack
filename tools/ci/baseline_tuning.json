@@ -1,0 +1,11 @@
+{
+  "seeds": 40,
+  "totalDepth": 83,
+  "totalScore": 4365450,
+  "params": {
+    "fleeHpNumerator": 1,
+    "lootRadius": 15,
+    "searchBurst": 8,
+    "frontierFarthest": false
+  }
+}

@@ -1,0 +1,21 @@
+# The committed nim.cfg would pin the AUTHOR's machine package paths; CI and
+# the Dockerfile regenerate it from the synced package tree instead.
+nim.cfg
+nimcache/
+dist/
+tmp/
+node_modules/
+replay-viewer/dist/
+*.exe
+*.out
+
+# Built binaries, root-anchored: `src/nethack/` is a SOURCE directory and a
+# bare `nethack` pattern would swallow the whole sim.
+/nethack
+/nethack-player
+
+# Compiled test binaries (the .nim sources beside them are tracked).
+tests/test_nethack_*
+!tests/test_nethack_*.nim
+tests/helpers
+tests/makefixture

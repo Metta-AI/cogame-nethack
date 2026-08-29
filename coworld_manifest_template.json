@@ -1,0 +1,656 @@
+{
+  "$schema": "https://softmax.com/schemas/coworld-manifest.json",
+  "tags": [
+    "roguelike",
+    "single-agent",
+    "procedural-generation",
+    "long-horizon",
+    "text-observation",
+    "nethack"
+  ],
+  "episode_timeout_minutes": 20,
+  "game": {
+    "name": "nethack",
+    "owner": "daveey@softmax.com",
+    "description": "NetHack in miniature. One cog, one life, a seeded procedurally generated dungeon, a text observation of glyphs plus a message line plus a status line, and a score that is overwhelmingly how deep it got.",
+    "image": "{{NETHACK_IMAGE}}",
+    "runnable": {
+      "type": "game",
+      "image": "{{NETHACK_IMAGE}}",
+      "run": [
+        "/bin/nethack"
+      ],
+      "env": {
+        "ANTHROPIC_API_KEY_URI": "secret://coworld/nethack/anthropic_api_key"
+      }
+    },
+    "replay_viewer": {
+      "bundle": "static-replay-viewer"
+    },
+    "protocols": {
+      "player": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/PROTOCOL.md"
+      },
+      "global": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/PROTOCOL.md"
+      }
+    },
+    "docs": {
+      "readme": {
+        "type": "uri",
+        "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/README.md"
+      },
+      "pages": [
+        {
+          "id": "rules.md",
+          "title": "Rules",
+          "content": {
+            "type": "uri",
+            "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/RULES.md"
+          }
+        },
+        {
+          "id": "actions.md",
+          "title": "Actions and the reply format",
+          "content": {
+            "type": "uri",
+            "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/ACTIONS.md"
+          }
+        },
+        {
+          "id": "porting.md",
+          "title": "What this is and is not a port of",
+          "content": {
+            "type": "uri",
+            "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/PORTING-NETHACK.md"
+          }
+        }
+      ]
+    },
+    "config_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokens",
+        "players"
+      ],
+      "properties": {
+        "tokens": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Runner-injected seat tokens. Never present in a game_config in this template."
+        },
+        "players": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "slots": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 1,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "levelLadder": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 5,
+          "items": {
+            "type": "string",
+            "enum": [
+              "corridor",
+              "lavacross",
+              "monsterroom",
+              "lockedvault",
+              "oracle"
+            ]
+          }
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "num_agents": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1,
+          "default": 1
+        },
+        "minPlayers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1,
+          "default": 1
+        },
+        "levelW": {
+          "type": "integer",
+          "minimum": 48,
+          "maximum": 48,
+          "default": 48
+        },
+        "levelH": {
+          "type": "integer",
+          "minimum": 18,
+          "maximum": 18,
+          "default": 18
+        },
+        "dungeonLevels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 8
+        },
+        "turnTicks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 40
+        },
+        "maxTurns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 55
+        },
+        "maxTicks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000,
+          "default": 2200
+        },
+        "parDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 4
+        },
+        "maxActionsPerTurn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 10
+        },
+        "macroPrimitiveCap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 40
+        },
+        "startHp": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 16
+        },
+        "startNutrition": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4000,
+          "default": 900
+        },
+        "regenTicks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 12
+        },
+        "consultCost": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 50
+        },
+        "searchesToReveal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3
+        },
+        "searchBurst": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 8
+        },
+        "aggroRange": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 48,
+          "default": 10
+        },
+        "attempt1Ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000,
+          "default": 6000
+        },
+        "retryMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000,
+          "default": 3000
+        },
+        "turnBudgetMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 120000,
+          "default": 9500
+        },
+        "turnSpacingMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000,
+          "default": 2600
+        },
+        "wallClockBudgetSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 660,
+          "default": 660
+        },
+        "lobbyJoinTimeoutTicks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000,
+          "default": 2400
+        },
+        "gameOverTicks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000,
+          "default": 48
+        },
+        "fastMode": {
+          "type": "boolean",
+          "default": true
+        },
+        "showPlayerLabels": {
+          "type": "boolean",
+          "default": false
+        },
+        "model": {
+          "type": "string"
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192,
+          "default": 900
+        }
+      }
+    },
+    "results_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scores": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "win": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "winner": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "deadline",
+            "fault"
+          ]
+        },
+        "endRule": {
+          "type": "string",
+          "enum": [
+            "death",
+            "bottom",
+            "escaped",
+            "turnCap",
+            "wallClock",
+            "fault"
+          ]
+        },
+        "variant": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "dungeonLevels": {
+          "type": "integer"
+        },
+        "parDepth": {
+          "type": "integer"
+        },
+        "depthReached": {
+          "type": "integer"
+        },
+        "finalDepth": {
+          "type": "integer"
+        },
+        "gold": {
+          "type": "integer"
+        },
+        "xpPoints": {
+          "type": "integer"
+        },
+        "xlevel": {
+          "type": "integer"
+        },
+        "monstersKilled": {
+          "type": "integer"
+        },
+        "itemsPicked": {
+          "type": "integer"
+        },
+        "timesAte": {
+          "type": "integer"
+        },
+        "potionsQuaffed": {
+          "type": "integer"
+        },
+        "oracleConsults": {
+          "type": "integer"
+        },
+        "doorsKicked": {
+          "type": "integer"
+        },
+        "trapsTriggered": {
+          "type": "integer"
+        },
+        "deeds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "fed",
+              "hoard",
+              "oracle"
+            ]
+          }
+        },
+        "deedCount": {
+          "type": "integer"
+        },
+        "hpFinal": {
+          "type": "integer"
+        },
+        "maxHpFinal": {
+          "type": "integer"
+        },
+        "causeOfDeath": {
+          "type": "string",
+          "enum": [
+            "killed",
+            "starved",
+            "burned",
+            "none"
+          ]
+        },
+        "killer": {
+          "type": "string"
+        },
+        "levelTurns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "levelTicks": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "levelKills": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "levelGold": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "goldPickedUp": {
+          "type": "integer"
+        },
+        "cellsSeen": {
+          "type": "integer"
+        },
+        "cellsTotal": {
+          "type": "integer"
+        },
+        "primitivesExecuted": {
+          "type": "integer"
+        },
+        "actionsDropped": {
+          "type": "integer"
+        },
+        "macrosUnreachable": {
+          "type": "integer"
+        },
+        "repliesRepaired": {
+          "type": "integer"
+        },
+        "finalTick": {
+          "type": "integer"
+        },
+        "turnsPlayed": {
+          "type": "integer"
+        },
+        "policyKinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "llmTurns": {
+          "type": "integer"
+        },
+        "fallbackTurns": {
+          "type": "integer"
+        },
+        "deadSeats": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "stopDetail": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "variants": [
+    {
+      "id": "descend",
+      "name": "The Descent (1 cog, 8 procedurally generated levels)",
+      "description": "One cog, one life, eight levels of a dungeon generated fresh from this round's seed. Rooms, corridors, locked doors and secret passages; eleven kinds of monster; gold, food and unidentified potions; traps you cannot see until you step on them; and a hunger clock that will kill you if you ignore it. The cog reads an ASCII map, a message line and a status line - the same text a NetHack player reads - and answers with commands. Score is how deep it got.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Alpha"
+          }
+        ],
+        "num_agents": 1,
+        "minPlayers": 1,
+        "levelW": 48,
+        "levelH": 18,
+        "dungeonLevels": 8,
+        "levelLadder": [],
+        "turnTicks": 40,
+        "maxTurns": 55,
+        "maxTicks": 2200,
+        "parDepth": 4,
+        "maxActionsPerTurn": 10,
+        "macroPrimitiveCap": 40,
+        "startHp": 16,
+        "startNutrition": 900,
+        "regenTicks": 12,
+        "consultCost": 50,
+        "searchesToReveal": 3,
+        "searchBurst": 8,
+        "aggroRange": 10,
+        "attempt1Ms": 6000,
+        "retryMs": 3000,
+        "turnBudgetMs": 9500,
+        "turnSpacingMs": 2600,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2400,
+        "fastMode": true,
+        "showPlayerLabels": false
+      }
+    },
+    {
+      "id": "minihack",
+      "name": "MiniHack ladder (1 cog, 5 authored levels)",
+      "description": "Five small hand-authored levels in a fixed order, each seeded: a long winding corridor, a lava river with one bridge, a room with four monsters between the cog and the stairs, a vault whose only door is locked and must be kicked open, and the Oracle's level. Same dungeon, same permadeath, same text observation - but each level asks one clean question, which makes this the ladder to teach a policy on.",
+      "game_config": {
+        "players": [
+          {
+            "name": "Alpha"
+          }
+        ],
+        "num_agents": 1,
+        "minPlayers": 1,
+        "levelW": 48,
+        "levelH": 18,
+        "dungeonLevels": 5,
+        "levelLadder": [
+          "corridor",
+          "lavacross",
+          "monsterroom",
+          "lockedvault",
+          "oracle"
+        ],
+        "turnTicks": 40,
+        "maxTurns": 55,
+        "maxTicks": 2200,
+        "parDepth": 3,
+        "maxActionsPerTurn": 10,
+        "macroPrimitiveCap": 40,
+        "startHp": 16,
+        "startNutrition": 900,
+        "regenTicks": 12,
+        "consultCost": 50,
+        "searchesToReveal": 3,
+        "searchBurst": 8,
+        "aggroRange": 10,
+        "attempt1Ms": 6000,
+        "retryMs": 3000,
+        "turnBudgetMs": 9500,
+        "turnSpacingMs": 2600,
+        "wallClockBudgetSeconds": 660,
+        "lobbyJoinTimeoutTicks": 2400,
+        "fastMode": true,
+        "showPlayerLabels": false
+      }
+    }
+  ],
+  "player": [
+    {
+      "id": "delver",
+      "type": "policy",
+      "name": "delver",
+      "description": "The deterministic dungeon crawler: eat when weak, take the stairs when it knows them, fight what is already on top of it, open what is closed, kick what is locked, and explore the darkest edge otherwise. The floor every LLM policy is measured against.",
+      "image": "{{NETHACK_IMAGE}}",
+      "run": [
+        "/bin/nethack-player"
+      ],
+      "env": {
+        "PLAYER_SCRIPTED": "delver",
+        "PLAYER_POLICY_LABEL": "delver"
+      },
+      "source_url": "https://github.com/Metta-AI/cogame-nethack",
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "64Mi"
+        },
+        "limits": {
+          "cpu": "1"
+        }
+      }
+    }
+  ],
+  "certification": {
+    "players": [
+      {
+        "player_id": "delver"
+      }
+    ],
+    "game_config": {
+      "players": [
+        {
+          "name": "Alpha"
+        }
+      ],
+      "num_agents": 1,
+      "minPlayers": 1,
+      "levelW": 48,
+      "levelH": 18,
+      "dungeonLevels": 8,
+      "levelLadder": [],
+      "turnTicks": 40,
+      "maxTurns": 55,
+      "maxTicks": 2200,
+      "parDepth": 4,
+      "maxActionsPerTurn": 10,
+      "macroPrimitiveCap": 40,
+      "startHp": 16,
+      "startNutrition": 900,
+      "regenTicks": 12,
+      "consultCost": 50,
+      "searchesToReveal": 3,
+      "searchBurst": 8,
+      "aggroRange": 10,
+      "wallClockBudgetSeconds": 240,
+      "lobbyJoinTimeoutTicks": 600,
+      "fastMode": true,
+      "showPlayerLabels": false,
+      "seed": 42
+    }
+  }
+}

@@ -1,0 +1,16 @@
+version     = "0.1.0"
+author      = "Metta-AI"
+description = "NetHack in miniature: a seeded, procedurally generated roguelike dungeon for one LLM cog."
+license     = "MIT"
+
+srcDir = "src"
+
+requires "nim >= 2.2.4"
+requires "bitworld >= 0.1.0"
+requires "pixie"
+requires "mummy >= 0.4.7"
+requires "curly >= 1.1.1"
+requires "jsony"
+requires "zippy"
+requires "flatty >= 0.3.4"
+requires "supersnappy >= 2.1.3"

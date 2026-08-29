@@ -1,0 +1,579 @@
+<!-- ============================================================
+     NETHACK additions to the inherited coworld-ctf chrome
+     ============================================================
+     Everything above this banner is the classic broadcast page, edited only
+     where the design note's Viewer section enumerates: the removed #povBadge
+     and #fpv-hp / #fpv-gear / #fpv-map elements, the scorebug plate's
+     CONTENTS, the endcard's stat columns and the label re-mappings. The
+     splice hook is the starter's own: window.NethackChrome.install(PB_CTX) /
+     .frame(s, ctx, jumped) / .event(e, s, ctx), same signatures.
+
+     The classic #viewpanel (zoom bar + minimap) is KEPT: a dungeon level is
+     48x18 cells and the board is larger than a 360px embed frame, so the
+     minimap and the zoom bar are load-bearing here rather than decoration.
+
+     Nothing here touches the transport band. relayout() still owns
+     --hudscale, --topband and --band on :root; the endcard still stops at
+     bottom: var(--band, 0px) and is still dismissed by every seek; and every
+     scrubber beat this block draws is a LABELLED, CLICKABLE BUTTON that
+     seeks on click, styled for EVERY kind the sim emits — descend, ascend,
+     levelup, deed, oracle, death, bottom, escaped, fallback and end. The
+     builder carries an nh- prefix precisely so it can never be shadowed by
+     the chrome alias block's own hoisted declaration of the shared one
+     (cogame-tandem, 2026-08-23).
+     ============================================================ -->
+<style>
+/* --- scorebug: the plate must survive a 360px featured-match iframe ------ */
+/* The plate name grows into whatever room the plate has and ellipsises only
+   when it genuinely runs out, never collapsing to a bare "…". */
+.plate-name {
+  flex: 1 1 auto;
+  min-width: 3.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plate .nh-alias {
+  font-family: var(--finefont);
+  font-size: calc(7.5 * var(--u));
+  letter-spacing: 0.12em;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  flex: none;
+}
+.plate .hungerchip {
+  font-family: var(--pixfont);
+  font-size: calc(11 * var(--u));
+  line-height: 1;
+  min-width: calc(34 * var(--u));
+  text-align: center;
+  padding: calc(3 * var(--u)) calc(4 * var(--u));
+  background: rgba(12, 9, 6, 0.55);
+  box-shadow: inset 0 0 0 calc(1 * var(--u)) rgba(242, 232, 216, 0.14);
+  flex: none;
+  white-space: nowrap;
+}
+.plate .hungerchip.warn { color: var(--amber); }
+.plate .hungerchip.bad {
+  color: var(--red);
+  box-shadow: inset 0 0 0 calc(1.5 * var(--u)) currentColor;
+}
+.plate .hp-label {
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+}
+.plate .score-num {
+  font-family: var(--pixfont);
+  font-size: calc(20 * var(--u));
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.plate .pb-sub {
+  display: flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+  margin-top: calc(3 * var(--u));
+}
+.plate.side-r .pb-sub { flex-direction: row-reverse; }
+.plate .nh-stats {
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  white-space: nowrap;
+}
+.plate .hpbar {
+  display: inline-block;
+  width: calc(56 * var(--u));
+  height: calc(5 * var(--u));
+  background: rgba(12, 9, 6, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(242, 232, 216, 0.18);
+  flex: none;
+}
+.plate .hpbar i {
+  display: block;
+  height: 100%;
+  background: var(--amber);
+}
+.plate .hpbar.low i { background: var(--red); }
+
+/* --- the three deed chips, in the kept #plates-r column ------------------ */
+#nh-deeds {
+  display: flex;
+  align-items: center;
+  gap: calc(5 * var(--u));
+  justify-content: flex-end;
+  width: 100%;
+}
+#nh-deeds .deed {
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: calc(3 * var(--u)) calc(6 * var(--u));
+  color: var(--paper-dim);
+  background: rgba(12, 9, 6, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(242, 232, 216, 0.14);
+  white-space: nowrap;
+}
+#nh-deeds .deed.on {
+  color: var(--amber);
+  box-shadow: inset 0 0 0 calc(1.5 * var(--u)) currentColor;
+}
+
+/* --- the depth ladder, pinned inside the BOARD region ------------------- */
+/* Never in the transport band: it is anchored to the top band and stops well
+   above 100% - var(--band). */
+#nh-ladder {
+  position: absolute;
+  left: calc(6 * var(--u));
+  top: calc(var(--topband, 0px) + 10 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(3 * var(--u));
+  z-index: 9;
+  pointer-events: none;
+}
+#nh-ladder .rung {
+  display: flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  font-family: var(--finefont);
+  font-size: calc(8 * var(--u));
+  letter-spacing: 0.1em;
+  color: var(--paper-dim);
+}
+#nh-ladder .rung i {
+  display: inline-block;
+  width: calc(16 * var(--u));
+  height: calc(5 * var(--u));
+  background: rgba(12, 9, 6, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(242, 232, 216, 0.2);
+}
+#nh-ladder .rung.visited i { background: rgba(232, 163, 61, 0.45); }
+#nh-ladder .rung.current i { box-shadow: inset 0 0 0 calc(1.5 * var(--u)) var(--paper); }
+#nh-ladder .rung.deepest i { background: var(--amber); }
+#nh-ladder .rung.grave b { color: var(--red); }
+
+/* --- the terminal panel (the repurposed #fpv inset) --------------------- */
+#nh-term {
+  position: absolute;
+  inset: calc(4 * var(--u)) calc(4 * var(--u)) calc(16 * var(--u));
+  margin: 0;
+  overflow: hidden;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: calc(6.5 * var(--u));
+  line-height: 1.02;
+  white-space: pre;
+  color: rgba(226, 232, 214, 0.92);
+  text-shadow: 0 0 calc(2 * var(--u)) rgba(60, 220, 160, 0.25);
+  pointer-events: none;
+}
+#nh-term .msg { color: var(--amber); }
+#nh-term .stat { color: rgba(226, 232, 214, 0.7); }
+
+/* --- scrubber beats: one rule per kind the sim emits, and no others ----- */
+/* Buttons, not divs: each carries a title + aria-label and seeks on click. */
+button.beat-marker {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+  background: var(--paper-dim);
+}
+.beat-marker.descend {
+  background: var(--amber);
+  width: calc(3 * var(--u));
+  height: calc(13 * var(--u));
+}
+.beat-marker.ascend {
+  background: rgba(120, 170, 230, 0.9);
+  width: calc(2 * var(--u));
+  height: calc(10 * var(--u));
+}
+.beat-marker.levelup {
+  background: var(--paper);
+  width: calc(2 * var(--u));
+  height: calc(8 * var(--u));
+  opacity: 0.8;
+}
+.beat-marker.deed {
+  background: rgba(120, 220, 160, 0.9);
+  width: calc(2 * var(--u));
+  height: calc(9 * var(--u));
+}
+.beat-marker.oracle {
+  background: rgba(210, 160, 240, 0.95);
+  width: calc(2 * var(--u));
+  height: calc(9 * var(--u));
+}
+.beat-marker.death {
+  background: var(--red);
+  width: calc(4 * var(--u));
+  height: calc(15 * var(--u));
+}
+.beat-marker.bottom {
+  background: rgba(120, 220, 160, 1);
+  width: calc(4 * var(--u));
+  height: calc(15 * var(--u));
+}
+.beat-marker.escaped {
+  background: rgba(140, 190, 240, 1);
+  width: calc(3 * var(--u));
+  height: calc(13 * var(--u));
+}
+.beat-marker.fallback {
+  background: rgba(242, 232, 216, 0.5);
+  width: calc(2 * var(--u));
+  height: calc(6 * var(--u));
+}
+.beat-marker.end {
+  background: var(--amber);
+  width: calc(3 * var(--u));
+  height: calc(14 * var(--u));
+}
+
+/* --- feed rows ---------------------------------------------------------- */
+.feed-row .nh-say { color: var(--amber); }
+.feed-row .nh-note { color: var(--paper-dim); letter-spacing: 0.06em; }
+
+/* --- endcard: the tombstone -------------------------------------------- */
+#ec-headline .nh-stone {
+  display: block;
+  font-family: var(--pixfont);
+  line-height: 1.25;
+}
+
+/* --- 360px: the five .tiny rules the design note pins ------------------- */
+#stage.tiny .plate .nh-stats,
+#stage.tiny .plate .hp-label { display: none; }
+#stage.tiny .plate .nh-alias { font-size: calc(7 * var(--u)); }
+#stage.tiny #nh-deeds .deed {
+  font-size: 0;
+  padding: 0;
+  width: calc(8 * var(--u));
+  height: calc(8 * var(--u));
+  border-radius: 50%;
+}
+#stage.tiny #nh-ladder .rung span { display: none; }
+#stage.tiny #nh-ladder .rung i { width: calc(10 * var(--u)); }
+#stage.tiny #nh-ladder { gap: calc(2 * var(--u)); }
+#stage.tiny #nh-term { font-size: calc(9 * var(--u)); line-height: 1.2; }
+#stage.tiny #fpv-grip { display: none; }
+</style>
+<script>
+(function () {
+  'use strict';
+  // Every name here carries an nh- prefix ON PURPOSE. The page's chrome alias
+  // block declares the shared beat builder with a hoisted `var`, so a
+  // game-block function of that same name is silently swallowed by it and the
+  // scrubber ends up with unlabelled div markers that never seek
+  // (cogame-tandem, 2026-08-23).
+  var CTX = null;
+  var placed = {};              // "tick|kind" -> true (dedup)
+  var lastEnd = '';
+
+  function $(id) { return document.getElementById(id); }
+
+  function scrubGeometry(s) {
+    var st = Math.max(0, s.st || 0);
+    var mx = Math.max(st + 1, s.mx || 1);
+    return { st: st, span: mx - st };
+  }
+
+  function nhBeat(s, tick, kind, label) {
+    var key = tick + '|' + kind;
+    if (placed[key]) return;
+    placed[key] = true;
+    var scrub = $('scrub');
+    if (!scrub) return;
+    var g = scrubGeometry(s);
+    var el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'beat-marker ' + kind;
+    el.style.left =
+      (Math.min(1, Math.max(0, (tick - g.st) / g.span)) * 100) + '%';
+    el.title = label;
+    el.setAttribute('aria-label', label);
+    el.__tick = tick;
+    el.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      CTX.send('s:' + tick);
+    });
+    scrub.appendChild(el);
+  }
+
+  function feedRow(html, cls) {
+    var row = document.createElement('div');
+    row.className = 'feed-row' + (cls ? ' ' + cls : '');
+    row.innerHTML = html;
+    CTX.pushFeed(row);
+  }
+
+  function badge(text) {
+    return '<span class="badge">' + CTX.esc(text) + '</span>';
+  }
+
+  // Plain language, never internal notation: this is what a casual spectator
+  // reads to understand what the policy just did.
+  function beatLabelFor(e) {
+    switch (e.k) {
+      case 'descend': return 'Descended to dungeon level ' + e.to;
+      case 'ascend': return 'Climbed back to dungeon level ' + e.to;
+      case 'levelup': return 'Experience level ' + e.xlevel;
+      case 'deed': return 'Deed earned: ' + String(e.name || '').toUpperCase();
+      case 'oracle': return e.paid ? 'Consulted the Oracle' : 'The Oracle refused';
+      case 'death': return 'Killed by ' + (e.killer || 'the dungeon') +
+        ' on dungeon level ' + e.depth;
+      case 'bottom': return 'Reached the bottom of the dungeon';
+      case 'escaped': return 'Escaped the dungeon';
+      case 'fallback': return 'Missed the call — delver plan (' + (e.cause || '') + ')';
+      case 'end': return 'Run over — ' + (e.endRule || '');
+    }
+    return e.k;
+  }
+
+  var BEAT_KINDS = {
+    descend: 1, ascend: 1, levelup: 1, deed: 1, oracle: 1, death: 1,
+    bottom: 1, escaped: 1, fallback: 1, end: 1
+  };
+
+  // Every feed row and beat nethack produces. Returns true when the event was
+  // handled here, so the inherited switch never doubles it.
+  function nhEvent(e, s, ctx) {
+    CTX = ctx;
+    if (BEAT_KINDS[e.k]) {
+      nhBeat(s, e.t, e.k, beatLabelFor(e) + ' — click to jump here');
+    }
+    switch (e.k) {
+      case 'descend':
+        feedRow('<span class="nh-say">DESCENDED TO DUNGEON LEVEL ' + e.to + '</span>');
+        CTX.banner('DUNGEON LEVEL ' + e.to, 'amb');
+        return true;
+      case 'ascend':
+        feedRow('<span class="nh-say">CLIMBED TO DUNGEON LEVEL ' + e.to + '</span>');
+        return true;
+      case 'kill':
+        feedRow('KILLED ' + badge(String(e.monster || '').toUpperCase()));
+        return true;
+      case 'hurt':
+        feedRow('<span class="who red">THE ' +
+          CTX.esc(String(e.by || '').toUpperCase()) + '</span>' +
+          '<span class="glyph">▸</span>' +
+          badge(e.dmg + ' damage, ' + e.hp + ' hp left'));
+        return true;
+      case 'gold':
+        feedRow('PICKED UP ' + badge(e.amount + ' GOLD PIECES'));
+        return true;
+      case 'item':
+        feedRow('PICKED UP ' + badge(String(e.name || '').toUpperCase()));
+        return true;
+      case 'eat':
+        feedRow('ATE ' + badge('A RATION'));
+        return true;
+      case 'quaff':
+        feedRow('DRANK THE ' + CTX.esc(String(e.appearance || '').toUpperCase()) +
+          ' POTION ' + badge('IT WAS ' + String(e.effect || '').toUpperCase()));
+        return true;
+      case 'trap':
+        feedRow('SPRANG A ' + badge(String(e.kind || '').toUpperCase() +
+          (e.dmg ? ' — ' + e.dmg + ' DAMAGE' : '')));
+        return true;
+      case 'door':
+        if (e.action === 'kick') feedRow('KICKED THE LOCKED DOOR OPEN');
+        else if (e.action === 'locked') feedRow('THAT DOOR IS LOCKED');
+        return true;
+      case 'oracle':
+        feedRow(e.paid
+          ? 'CONSULTED THE ORACLE ' + badge('THE STAIRS LIE ' +
+              String(e.hint || '').toUpperCase())
+          : 'THE ORACLE SCOWLS AT AN EMPTY PURSE');
+        return true;
+      case 'levelup':
+        feedRow('WELCOME TO EXPERIENCE LEVEL ' + e.xlevel);
+        return true;
+      case 'deed':
+        feedRow('DEED EARNED: ' + badge(String(e.name || '').toUpperCase()));
+        return true;
+      case 'hunger':
+        feedRow('<span class="nh-note">YOU FEEL ' +
+          CTX.esc(String(e.state || '').toUpperCase()) + '</span>');
+        return true;
+      case 'fallback':
+        feedRow('<span class="nh-note">MISSED THE CALL — DELVER PLAN (' +
+          CTX.esc(String(e.cause || '')) + ')</span>');
+        return true;
+      case 'death':
+        CTX.banner('ALPHA THE DIGGER, KILLED BY ' +
+          String(e.killer || 'THE DUNGEON').toUpperCase() +
+          ' ON DUNGEON LEVEL ' + e.depth, 'red');
+        feedRow('<span class="nh-say">ALPHA THE DIGGER, KILLED BY ' +
+          CTX.esc(String(e.killer || 'the dungeon').toUpperCase()) +
+          ' ON DUNGEON LEVEL ' + e.depth + '.</span>');
+        return true;
+      case 'bottom':
+        CTX.banner('REACHED THE BOTTOM', 'amb');
+        return true;
+      case 'escaped':
+        CTX.banner('ESCAPED THE DUNGEON', 'amb');
+        return true;
+      case 'turn':
+      case 'plan':
+      case 'end':
+        return true;
+    }
+    return false;
+  }
+
+  // ---- the three deed chips, in the kept #plates-r column -----------------
+  function renderDeeds(s) {
+    var host = $('plates-r');
+    if (!host) return;
+    var deeds = (s.nh && s.nh.deeds) || [];
+    if (!deeds.length) return;
+    var box = $('nh-deeds');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'nh-deeds';
+      host.appendChild(box);
+    }
+    var key = deeds.map(function (d) { return d.name + (d.earned ? '1' : '0'); }).join(',');
+    if (box._key === key) return;
+    box._key = key;
+    box.innerHTML = deeds.map(function (d) {
+      return '<span class="deed' + (d.earned ? ' on' : '') + '" title="' +
+        CTX.esc(d.name) + '">' + CTX.esc(String(d.name).toUpperCase()) + '</span>';
+    }).join('');
+  }
+
+  // ---- the depth ladder ---------------------------------------------------
+  function renderLadder(s) {
+    var stage = $('stage');
+    if (!stage) return;
+    var rungs = (s.nh && s.nh.ladder) || [];
+    if (!rungs.length) return;
+    var box = $('nh-ladder');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'nh-ladder';
+      stage.appendChild(box);
+    }
+    var key = rungs.map(function (r) {
+      return (r.visited ? 'v' : '') + (r.current ? 'c' : '') +
+        (r.deepest ? 'd' : '') + (r.grave ? 'g' : '');
+    }).join('');
+    if (box._key === key) return;
+    box._key = key;
+    box.innerHTML = rungs.map(function (r) {
+      var cls = 'rung' + (r.visited ? ' visited' : '') +
+        (r.current ? ' current' : '') + (r.deepest ? ' deepest' : '') +
+        (r.grave ? ' grave' : '');
+      return '<div class="' + cls + '" title="Dungeon level ' + r.d +
+        (r.visited ? ' — arrived at tick ' + r.ticks : ' — never visited') + '">' +
+        '<i></i><span>DL' + r.d + (r.grave ? ' <b>†</b>' : '') + '</span></div>';
+    }).join('');
+  }
+
+  // ---- the terminal panel -------------------------------------------------
+  // The idea's "ttyrec playback", honestly re-implemented: exactly the text
+  // the cog receives. DOM text, not canvas text, so it can never be drawn
+  // outside the canvas (--strict-text-bounds stays satisfied) and it always
+  // clips to the panel's own box.
+  function renderTerminal(s) {
+    var host = $('fpv');
+    if (!host) return;
+    host.classList.add('on');
+    var pre = $('nh-term');
+    if (!pre) {
+      pre = document.createElement('pre');
+      pre.id = 'nh-term';
+      host.appendChild(pre);
+    }
+    var nh = s.nh || {};
+    var tiny = $('stage') && $('stage').classList.contains('tiny');
+    var rows = tiny ? [] : (nh.map || []);
+    var messages = nh.messages || [];
+    var message = messages.length ? messages[messages.length - 1] : '';
+    var body = rows.join('\n');
+    var key = body + '|' + message + '|' + (nh.status || '');
+    if (pre._key === key) return;
+    pre._key = key;
+    pre.innerHTML =
+      (body ? CTX.esc(body) + '\n' : '') +
+      '<span class="msg">' + CTX.esc(message) + '</span>\n' +
+      '<span class="stat">' + CTX.esc(nh.status || '') + '</span>';
+    var nameEl = $('fpv-name');
+    if (nameEl) {
+      var line = 'ALPHA THE DIGGER · DLVL ' + (nh.depth || 1);
+      if (nameEl.textContent !== line) nameEl.textContent = line;
+      nameEl.className = 'fpv-name';
+    }
+  }
+
+  // ---- the tombstone ------------------------------------------------------
+  function renderTombstone(s) {
+    if (s.ph !== 'gameover') { lastEnd = ''; return; }
+    var head = $('ec-headline');
+    if (!head) return;
+    var nh = s.nh || {};
+    var rule = nh.endRule || 'turnCap';
+    var headline;
+    if (rule === 'death') {
+      headline = 'ALPHA THE DIGGER / KILLED BY ' +
+        String(nh.killer || 'the dungeon').toUpperCase() +
+        ' / ON DUNGEON LEVEL ' + (nh.depth || 1) + ' / ' + (nh.score || 0) + ' POINTS';
+    } else if (rule === 'bottom') {
+      headline = 'REACHED THE BOTTOM / DUNGEON LEVEL ' + (nh.deepest || 1) +
+        ' / ' + (nh.score || 0) + ' POINTS';
+    } else if (rule === 'escaped') {
+      headline = 'ESCAPED THE DUNGEON / DEEPEST LEVEL ' + (nh.deepest || 1) +
+        ' / ' + (nh.score || 0) + ' POINTS';
+    } else {
+      headline = 'OUT OF TIME / DEEPEST LEVEL ' + (nh.deepest || 1) +
+        ' / ' + (nh.score || 0) + ' POINTS';
+    }
+    if (lastEnd === headline) return;
+    lastEnd = headline;
+    head.innerHTML = '<span class="nh-stone">' +
+      headline.split(' / ').map(CTX.esc).join('<br>') + '</span>';
+    var how = $('ec-how');
+    if (how) {
+      how.textContent = (nh.kills || 0) + ' monsters killed, ' + (nh.gold || 0) +
+        ' gold, ' + (nh.meals || 0) + ' meals, ' + (nh.kicks || 0) +
+        ' doors kicked, ' + (nh.seen || 0) + ' of ' + (nh.cells || 0) +
+        ' cells seen, ' + (nh.fallbacks || 0) + ' fallback turns';
+    }
+  }
+
+  function nhFrame(s, ctx, jumped) {
+    CTX = ctx;
+    if (jumped) { placed = {}; lastEnd = ''; }
+    renderDeeds(s);
+    renderLadder(s);
+    renderTerminal(s);
+    renderTombstone(s);
+    // The up-front beat timeline (shipped ONCE by the server after its
+    // load-time pre-scan) places every marker before playback reaches it, so
+    // the scrubber is complete on the first frame instead of growing in.
+    if (s.beats && s.beats.length) {
+      for (var i = 0; i < s.beats.length; i++) {
+        var b = s.beats[i];
+        if (!BEAT_KINDS[b.k]) continue;
+        nhBeat(s, b.t, b.k, beatLabelFor(b) + ' — click to jump here');
+      }
+    }
+  }
+
+  window.NethackChrome = {
+    install: function (ctx) { CTX = ctx; },
+    frame: nhFrame,
+    event: nhEvent
+  };
+})();
+</script>
+
+</body>
+</html>

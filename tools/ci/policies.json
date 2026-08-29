@@ -1,0 +1,35 @@
+[
+  {
+    "name": "nethack-divemaster",
+    "run": "/bin/nethack-player",
+    "env": {
+      "PLAYER_PROMPT": "Depth is the only thing that scores. Get down the stairs.\nEvery turn, in this order:\n1. If you are standing on >, {\"do\":\"down\"}. No exceptions, no \"one more room\".\n2. If > is on your map, travel to it and take it in the SAME turn:\n   [{\"do\":\"travel\",\"x\":X,\"y\":Y},{\"do\":\"down\"}].\n3. If HP is below one third of max, do not fight anything. Travel away from the\n   monster toward the stairs you know, and drink an unidentified potion only if\n   you would otherwise die this turn - it is a coin flip and a coin flip beats\n   certain death.\n4. If hunger says Hungry or worse and you carry food, eat it NOW. A Weak cog\n   fights at -2 and cannot kick doors. Never let the clock reach Fainting.\n5. Otherwise explore toward the unknown: pick the cell on your map that is\n   floor or corridor AND touches the most spaces, travel to it, then add two or\n   three {\"do\":\"move\"} in the same heading so you actually cross into the dark.\n   Corridors only show you one cell at a time - keep moving.\n6. If nothing on the map touches a space and you have no >, you are behind a\n   secret door. Travel to a dead-end corridor cell and {\"do\":\"search\"} eight\n   times. Three searches next to a hidden door finds it.\nFight only what blocks the route, and only with HP above half. Pick up gold\nthat is on your way and food ALWAYS. Never melee e. Never travel across }.\nWrite \"notes\" every turn as: DL, where < and > are, which exits are still dark,\nwhat is in your pack, and what you learned about a potion colour. Notes are the\nonly memory you have.",
+      "PLAYER_POLICY_LABEL": "divemaster"
+    }
+  },
+  {
+    "name": "nethack-loremaster",
+    "run": "/bin/nethack-player",
+    "env": {
+      "PLAYER_PROMPT": "Play like someone who has read the wiki. Survive first, then dive.\nLore you already know and must use:\n- e is a floating eye. NEVER attack it in melee, at any HP, for any reason.\n  Walk around it. It never moves, so it is only ever a wall.\n- F is a lichen. It sticks to you. Kill it or you will not get away.\n- d jackals come in threes. Fight them in a doorway or a corridor so only one\n  reaches you at a time - never in the open room.\n- A + you cannot walk through is locked. Kick it: {\"do\":\"kick\",\"dir\":\"...\"}\n  repeatedly, up to four kicks a turn. You cannot kick while Weak, so eat first.\n- Unidentified potions are worth drinking when you are healthy and stuck, not\n  when you are dying: you want to LEARN the colour before you need it. Record\n  every colour you have drunk and what it did in \"notes\" and never re-test a\n  known colour.\n- The Oracle is O. Fifty gold buys the direction of the stairs down. If you\n  have 50 gold and see an O, buy it - it is a deed and a shortcut at once.\nTurn order:\n1. On >? Go down.\n2. Hungry or worse and carrying food? Eat.\n3. Adjacent monster you should fight (not e, not more than one at once)?\n   Attack it with two or three {\"do\":\"move\"} into it.\n4. > known? Travel there, then down.\n5. Otherwise explore the darkest edge of the map, and pick up food and gold on\n   the way; 500 gold is a deed.\nKeep a running note in this exact shape and rewrite it every turn:\n  \"DL<n> <(x,y) of < and >> | dark: <which side> | pack: <letters> |\n   potions: pink=heal, smoky=? | plan: <one clause>\"\nIf \"last_plan\" says truncated, re-issue the same travel - you were partway.\nIf it says unreachable, you have not found a route; explore toward that side.",
+      "PLAYER_POLICY_LABEL": "loremaster"
+    },
+    "player": "ply_bac48eb1-662e-44f8-973d-f3e016dccf5d"
+  },
+  {
+    "name": "nethack-delver",
+    "run": "/bin/nethack-player",
+    "env": {
+      "PLAYER_SCRIPTED": "delver",
+      "PLAYER_POLICY_LABEL": "delver"
+    }
+  },
+  {
+    "name": "nethack-bumbler",
+    "run": "/bin/nethack-player",
+    "env": {
+      "PLAYER_SCRIPTED": "bumbler",
+      "PLAYER_POLICY_LABEL": "bumbler"
+    }
+  }
+]
