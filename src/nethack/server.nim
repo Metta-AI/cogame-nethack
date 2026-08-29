@@ -439,31 +439,91 @@ proc runServerLoop*(
       sleep(1000 div TargetFps)
       continue
 
-    case sim.phase
-    of Lobby:
-      var joined = false
-      {.gcsafe.}:
-        withLock appState.lock:
-          joined = appState.playerSlots.len > 0
-      inc lobbyTicks
-      if joined and registered:
-        replayWriter.writeJoin(tickTime(0), 0, sim.playerName, 0, "")
-        sim.phase = Playing
-        started = true
-        echo "nethack: the descent begins"
-      elif lobbyTicks > config.lobbyJoinTimeoutTicks:
-        if joined and not registered:
-          ## The grf-football 2026-08-27 scar: never silently default a
-          ## joined-but-unregistered seat into a scripted policy.
-          echo "::error::the joined seat never sent a registration record; ",
-            "refusing to start it as a silent default"
-        declarePlayerFailure(0,
-          "the seat never joined and registered inside the lobby budget")
-        sim.deadSeat = true
-        replayWriter.writeJoin(tickTime(0), 0, sim.playerName, 0, "")
-        sim.phase = Playing
-        started = true
-      else:
+    ## FAULT — an unexpected exception in the sim or in this loop is
+    ## CAUGHT: the episode is settled from the last completed tick with
+    ## endRule = fault, the stop is written as the same load-bearing
+    ## record the wall-clock stop uses so playback settles on the same
+    ## tick, the artifacts are still written, and the process exits 0. A
+    ## crash out of this loop would leave no results.json at all.
+    try:
+      case sim.phase
+      of Lobby:
+        var joined = false
+        {.gcsafe.}:
+          withLock appState.lock:
+            joined = appState.playerSlots.len > 0
+        inc lobbyTicks
+        if joined and registered:
+          replayWriter.writeJoin(tickTime(0), 0, sim.playerName, 0, "")
+          sim.phase = Playing
+          started = true
+          echo "nethack: the descent begins"
+        elif lobbyTicks > config.lobbyJoinTimeoutTicks:
+          if joined and not registered:
+            ## The grf-football 2026-08-27 scar: never silently default a
+            ## joined-but-unregistered seat into a scripted policy.
+            echo "::error::the joined seat never sent a registration record; ",
+              "refusing to start it as a silent default"
+          declarePlayerFailure(0,
+            "the seat never joined and registered inside the lobby budget")
+          sim.deadSeat = true
+          replayWriter.writeJoin(tickTime(0), 0, sim.playerName, 0, "")
+          sim.phase = Playing
+          started = true
+        else:
+          var packets: seq[seq[uint8]] = @[]
+          {.gcsafe.}:
+            withLock appState.lock:
+              for socket, state in appState.globalViewers.mpairs:
+                var nextState = state
+                var packet = sim.buildBoardPacket(state, nextState)
+                packet.addChrome(sim.buildStateJson(
+                  newJArray(), false, 1, max(1, config.maxTicks), false, false,
+                  -1, 0, 0, false, false))
+                packets.add(packet)
+                state = nextState
+          for packet in packets:
+            broadcastPacket(packet)
+          ## Keep a frame flowing to the seat so its registration re-send has
+          ## something to key on (the paintball 2026-08-25 slot-sequential-join
+          ## scar); the seat sends no inputs, so this is purely a heartbeat.
+          var seats: seq[WebSocket] = @[]
+          {.gcsafe.}:
+            withLock appState.lock:
+              for socket in appState.playerSlots.keys:
+                seats.add(socket)
+          for socket in seats:
+            try:
+              socket.send(blobFromSpriteChat("tick"), BinaryMessage)
+            except CatchableError:
+              discard
+          sleep(1000 div TargetFps)
+      of Playing:
+        inc turnIndex
+        let outcome = engine.turn(sim, turnIndex, elapsedSeconds())
+        for record in outcome.records:
+          replayWriter.writeChat(tickTime(sim.tickCount), 0, record)
+        let observation = sim.observationJson(turnIndex, includeMap = false)
+        sim.lastSay = outcome.reply.say
+        var runner = sim.beginTurn(outcome.reply.actions, outcome.reply.dropped)
+        while not sim.turnDone(runner):
+          sim.stepTurn(runner)
+          replayWriter.writeHash(tickTime(sim.tickCount), sim.gameHash())
+          if eventsPath.len > 0:
+            if sim.executedVerb.len > 0:
+              eventRows.add(primitiveRow(sim.tickCount, sim.cog.depth,
+                                         sim.executedVerb))
+            for event in sim.events:
+              let row = jsonRow(event)
+              if row{"kind"}.getStr().len > 0:
+                eventRows.add(row)
+        sim.endTurn()
+        replayWriter.writeChat(tickTime(sim.tickCount), 0,
+          boundedDirectiveRecord(outcome.reply, turnIndex, sim.cog.depth, 0,
+                                 "Alpha", sim.lastExecuted, sim.lastTruncated,
+                                 sim.lastDropped, sim.lastUnreachable,
+                                 observation))
+        let events = sim.drainEvents()
         var packets: seq[seq[uint8]] = @[]
         {.gcsafe.}:
           withLock appState.lock:
@@ -471,72 +531,30 @@ proc runServerLoop*(
               var nextState = state
               var packet = sim.buildBoardPacket(state, nextState)
               packet.addChrome(sim.buildStateJson(
-                newJArray(), false, 1, max(1, config.maxTicks), false, false,
-                -1, 0, 0, false, false))
+                events, true, 1, max(1, sim.tickCount), false, true, -1, 0, 0,
+                false, false))
               packets.add(packet)
               state = nextState
         for packet in packets:
           broadcastPacket(packet)
-        ## Keep a frame flowing to the seat so its registration re-send has
-        ## something to key on (the paintball 2026-08-25 slot-sequential-join
-        ## scar); the seat sends no inputs, so this is purely a heartbeat.
-        var seats: seq[WebSocket] = @[]
-        {.gcsafe.}:
-          withLock appState.lock:
-            for socket in appState.playerSlots.keys:
-              seats.add(socket)
-        for socket in seats:
-          try:
-            socket.send(blobFromSpriteChat("tick"), BinaryMessage)
-          except CatchableError:
-            discard
+      of GameOver:
+        if not artifactsWritten:
+          writeArtifacts()
+        inc gameOverHeld
+        if gameOverHeld > config.gameOverTicks:
+          break
         sleep(1000 div TargetFps)
-    of Playing:
-      inc turnIndex
-      let outcome = engine.turn(sim, turnIndex, elapsedSeconds())
-      for record in outcome.records:
-        replayWriter.writeChat(tickTime(sim.tickCount), 0, record)
-      let observation = sim.observationJson(turnIndex, includeMap = false)
-      sim.lastSay = outcome.reply.say
-      var runner = sim.beginTurn(outcome.reply.actions, outcome.reply.dropped)
-      while not sim.turnDone(runner):
-        sim.stepTurn(runner)
-        replayWriter.writeHash(tickTime(sim.tickCount), sim.gameHash())
-        if eventsPath.len > 0:
-          if sim.executedVerb.len > 0:
-            eventRows.add(primitiveRow(sim.tickCount, sim.cog.depth,
-                                       sim.executedVerb))
-          for event in sim.events:
-            let row = jsonRow(event)
-            if row{"kind"}.getStr().len > 0:
-              eventRows.add(row)
-      sim.endTurn()
-      replayWriter.writeChat(tickTime(sim.tickCount), 0,
-        boundedDirectiveRecord(outcome.reply, turnIndex, sim.cog.depth, 0,
-                               "Alpha", sim.lastExecuted, sim.lastTruncated,
-                               sim.lastDropped, sim.lastUnreachable,
-                               observation))
-      let events = sim.drainEvents()
-      var packets: seq[seq[uint8]] = @[]
-      {.gcsafe.}:
-        withLock appState.lock:
-          for socket, state in appState.globalViewers.mpairs:
-            var nextState = state
-            var packet = sim.buildBoardPacket(state, nextState)
-            packet.addChrome(sim.buildStateJson(
-              events, true, 1, max(1, sim.tickCount), false, true, -1, 0, 0,
-              false, false))
-            packets.add(packet)
-            state = nextState
-      for packet in packets:
-        broadcastPacket(packet)
-    of GameOver:
-      if not artifactsWritten:
-        writeArtifacts()
-      inc gameOverHeld
-      if gameOverHeld > config.gameOverTicks:
-        break
-      sleep(1000 div TargetFps)
+    except CatchableError as error:
+      echo "::error::nethack: fault — ", error.msg
+      if not sim.ended:
+        try:
+          replayWriter.writeChat(tickTime(sim.tickCount), 0,
+                                 stopRecord(sim.tickCount, "fault"))
+        except CatchableError as writeError:
+          echo "fault stop record failed: ", writeError.msg
+        sim.settleFault(error.msg)
+      writeArtifacts()
+      break
 
   echo "nethack: episode complete (reason=", $sim.endReason, " endRule=",
     $sim.endRule, " depth=", sim.depthReached, " score=", sim.score(), ")"

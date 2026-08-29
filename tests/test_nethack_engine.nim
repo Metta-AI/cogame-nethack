@@ -1,7 +1,7 @@
 ## End-to-end episode tests: the artifacts, the certification seed, the
 ## degrade-never-hang guarantees and permadeath.
 
-import std/[json, os, strutils, unittest]
+import std/[json, os, strutils, unicode, unittest]
 
 import nethack/[sim, driver, baselines, directives, decide, replays]
 
@@ -186,3 +186,32 @@ suite "every end reason produces a rankable settlement":
         check results{"reason"}.getStr() == "fault"
       else:
         check results{"reason"}.getStr() == "complete"
+
+  test "a caught fault settles the episode from the last completed tick":
+    ## The server loop's except branch calls exactly this proc, so the
+    ## settlement it produces is testable without a live server: the run ends
+    ## at the tick it had reached, endRule is `fault`, and stopDetail names
+    ## the exception, rune-truncated at its cap.
+    var config = defaultGameConfig()
+    config.seed = 5150
+    var s = initSimServer(config)
+    s.phase = Playing
+    s.playTurn(delverPlan(s, DefaultBaselineParams), 0)
+    let tick = s.tickCount
+    var detail = ""
+    for i in 0 ..< 900:
+      detail.add("\u{1F480}")
+    s.settleFault(detail)
+    check s.ended
+    check s.tickCount == tick
+    check s.endRule == erFault
+    check s.endReason == reasonFault
+    check s.stopDetail.runeLen == MaxStopDetailRunes
+    check s.stopDetail.validateUtf8() == -1
+    let settled = parseJson(s.runResultsJson())
+    check settled{"reason"}.getStr() == "fault"
+    check settled{"stopDetail"}.getStr().len > 0
+    check settled{"finalTick"}.getInt() == tick
+    ## a second fault never re-settles a finished episode
+    s.settleFault("ignored")
+    check settled{"stopDetail"}.getStr() == s.stopDetail
