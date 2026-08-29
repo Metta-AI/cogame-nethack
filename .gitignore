@@ -19,3 +19,8 @@ tests/test_nethack_*
 !tests/test_nethack_*.nim
 tests/helpers
 tests/makefixture
+
+# Compiled tools (the .nim sources beside them are tracked), and python caches.
+/tools/tune_baselines
+/tools/record_fixture
+__pycache__/

@@ -27,7 +27,11 @@ set -uo pipefail
 
 BASE="${1:?usage: check_gameversion.sh <base-ref> [head-ref]}"
 HEAD_REF="${2:-HEAD}"
-CONST_FILE="src/ctf/sim_types.nim"
+# Retargeted for this fork: the const lives in src/nethack/sim_types.nim.
+# (The script itself is otherwise the starter's, byte for byte; a path is the
+#  one thing a fork MUST change, and the script says so in its own error
+#  message: "If the const was renamed, update tools/ci/check_gameversion.sh".)
+CONST_FILE="src/nethack/sim_types.nim"
 
 line() {
   # The GameVersion declaration line from one ref, or empty if unreadable.
