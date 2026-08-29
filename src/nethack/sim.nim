@@ -60,12 +60,6 @@ type
 
     notes*: string
     lastSay*: string
-    lastFallbackCause*: string
-      ## The cause of THIS turn's fallback, or "" when the turn's plan came
-      ## from the seat. Set before `beginTurn` on both paths — the live
-      ## server from the decision engine, the replay player from the turn's
-      ## `fallback` chat record — so the derived `fallback` event is
-      ## identical live and in replay.
     lastExecuted*: seq[string]
     lastTruncated*: bool
     lastDropped*, lastUnreachable*: int
@@ -255,16 +249,6 @@ proc endRun*(sim: var SimServer, rule: EndRule, cause: CauseOfDeath,
     discard
   sim.emit("end", %*{"reason": $sim.endReason, "endRule": $rule,
                      "depth": sim.depthReached, "score": sim.score()})
-
-proc settleFault*(sim: var SimServer, detail: string) =
-  ## An unexpected exception in the sim or in the server loop, CAUGHT: the
-  ## episode is settled from the last completed tick, `endRule` is `fault`,
-  ## `stopDetail` names it (rune-truncated at MaxStopDetailRunes), and the
-  ## caller still writes every artifact and exits 0.
-  if sim.ended:
-    return
-  sim.stopDetail = detail.truncateRunes(MaxStopDetailRunes)
-  sim.endRun(erFault, codNone, "")
 
 # ---------------------------------------------------------------------------
 #  Experience
@@ -565,13 +549,10 @@ proc applyPrimitive(sim: var SimServer, primitive: Primitive) =
   of vPickup:
     sim.applyPickup()
   of vEat:
-    let index = max(0, min(MaxInventory - 1, primitive.item))
-    let eaten = sim.cog.inv[index].itemName(sim.potionKnown,
-                                            sim.potionAppearance)
     let outcome = sim.cog.eatItem(primitive.item)
     if outcome.ok:
       inc sim.timesAte
-      sim.emit("eat", %*{"name": eaten, "nutrition": sim.cog.nutrition})
+      sim.emit("eat", %*{"name": "food", "nutrition": sim.cog.nutrition})
     sim.say(outcome.message)
   of vQuaff:
     let before = sim.cog.inv[max(0, min(MaxInventory - 1, primitive.item))]
