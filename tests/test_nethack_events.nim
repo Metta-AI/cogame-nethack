@@ -3,7 +3,7 @@
 
 import std/[json, os, strutils, unittest]
 
-import nethack/[sim, driver, baselines, broadcast, events]
+import nethack/[sim, driver, baselines, broadcast, decide, events]
 
 const EmittedKinds = [
   "turn", "plan", "say", "fallback", "descend", "ascend", "kill", "hurt",
@@ -53,6 +53,37 @@ suite "events are the closed enum":
         continue
       let kind = code.split('\'')[1]
       check kind in EmittedKinds
+
+suite "the fallback cause vocabulary is closed":
+  test "every cause decide.nim can write is in the declared set":
+    ## A source grep, in the shape of the no-floating-point sweep: the causes
+    ## are string literals handed to fallbackRecord, so the file itself is the
+    ## only place that can introduce one outside the note's closed list.
+    let source = readFile("src/nethack/decide.nim")
+    var scanning = false
+    for line in source.splitLines():
+      let code = line.strip()
+      if code.startsWith("##") or code.startsWith("#"):
+        continue
+      if "FallbackCauses* = [" in code:
+        scanning = true
+        continue
+      if scanning:
+        if code.endsWith("]"):
+          scanning = false
+        continue
+      if "fallbackRecord(" notin code and "lastCause = " notin code and
+          "let cause =" notin code and "\"no_credentials\"" notin code:
+        continue
+      for part in line.split('"'):
+        if part.len == 0 or part.len > 20:
+          continue
+        var isName = true
+        for ch in part:
+          if ch notin {'a' .. 'z', '_'}:
+            isName = false
+        if isName and ("_" in part or part in ["timeout", "throttled"]):
+          check part in FallbackCauses
 
 suite "the tier-2 stream keeps the starter's contract":
   test "every kind maps to a declared row name and the summary row is last":
