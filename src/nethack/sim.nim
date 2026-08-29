@@ -250,6 +250,16 @@ proc endRun*(sim: var SimServer, rule: EndRule, cause: CauseOfDeath,
   sim.emit("end", %*{"reason": $sim.endReason, "endRule": $rule,
                      "depth": sim.depthReached, "score": sim.score()})
 
+proc settleFault*(sim: var SimServer, detail: string) =
+  ## An unexpected exception in the sim or in the server loop, CAUGHT: the
+  ## episode is settled from the last completed tick, `endRule` is `fault`,
+  ## `stopDetail` names it (rune-truncated at MaxStopDetailRunes), and the
+  ## caller still writes every artifact and exits 0.
+  if sim.ended:
+    return
+  sim.stopDetail = detail.truncateRunes(MaxStopDetailRunes)
+  sim.endRun(erFault, codNone, "")
+
 # ---------------------------------------------------------------------------
 #  Experience
 # ---------------------------------------------------------------------------
