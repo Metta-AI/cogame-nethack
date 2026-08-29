@@ -34,8 +34,11 @@
 }
 /* The alias is the in-world name and the plate name is the REAL policy name:
    both must fit, and neither may collapse to a bare "…". The alias yields
-   first, because a spectator can read it off the terminal panel's caption. */
-.plate .plate-name { min-width: 4.5em; }
+   first, because a spectator can read it off the terminal panel's caption.
+   The wider floor is scoped OUT of .tiny: at the 360px featured-match width
+   the floor is exactly the 3.2em the acceptance checklist pins, so the rule
+   above is the one that decides. */
+#stage:not(.tiny) .plate .plate-name { min-width: 4.5em; }
 .plate .nh-alias {
   font-family: var(--finefont);
   font-size: calc(7.5 * var(--u));
