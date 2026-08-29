@@ -13,7 +13,6 @@
     "name": "nethack",
     "owner": "daveey@softmax.com",
     "description": "NetHack in miniature. One cog, one life, a seeded procedurally generated dungeon, a text observation of glyphs plus a message line plus a status line, and a score that is overwhelmingly how deep it got.",
-    "image": "{{NETHACK_IMAGE}}",
     "runnable": {
       "type": "game",
       "image": "{{NETHACK_IMAGE}}",
@@ -592,7 +591,7 @@
   "player": [
     {
       "id": "delver",
-      "type": "policy",
+      "type": "player",
       "name": "delver",
       "description": "The deterministic dungeon crawler: eat when weak, take the stairs when it knows them, fight what is already on top of it, open what is closed, kick what is locked, and explore the darkest edge otherwise. The floor every LLM policy is measured against.",
       "image": "{{NETHACK_IMAGE}}",
