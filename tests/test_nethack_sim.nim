@@ -257,11 +257,27 @@ suite "combat is deterministic and integer":
     var s = freshSim()
     let li = s.levelIndex
     s.levels[li].setTerrain(s.cog.x + 1, s.cog.y, tFloor)
+    s.levels[li].setTerrain(s.cog.x + 1, s.cog.y + 1, tFloor)
+    s.levels[li].setTerrain(s.cog.x - 1, s.cog.y, tFloor)
     s.levels[li].addMonster(spLichen, s.cog.x + 1, s.cog.y)
     s.cog.stuck = 3
     let (x, y) = (s.cog.x, s.cog.y)
+    ## west is a move AWAY from the lichen: it fails.
     s.playTurn(@[Action(verb: vMove, dir: 4, item: -1)], 0)
     check s.cog.x == x and s.cog.y == y
+    check "stuck to the lichen" in s.messages.join(" ")
+    ## south-east keeps contact with the same lichen: it is allowed.
+    s.cog.stuck = 3
+    s.playTurn(@[Action(verb: vMove, dir: 1, item: -1)], 0)
+    check s.cog.x == x + 1 and s.cog.y == y + 1
+    ## with the lichen dead there is nothing to be stuck to.
+    for i in 0 ..< s.levels[li].monsters.len:
+      if s.levels[li].monsters[i].species == spLichen:
+        s.levels[li].monsters[i].alive = false
+    s.cog.stuck = 3
+    let (bx, by) = (s.cog.x, s.cog.y)
+    s.playTurn(@[Action(verb: vMove, dir: 6, item: -1)], 0)
+    check not (s.cog.x == bx and s.cog.y == by)
 
   test "a monster never enters lava and never steps onto the cog":
     var level = newLevel(1)

@@ -376,6 +376,17 @@ proc ascend(sim: var SimServer) =
   sim.say("You climb the stairs. Dlvl " & $sim.cog.depth & ".")
   sim.emit("ascend", %*{"from": fromDepth, "to": sim.cog.depth})
 
+proc lichenHolds(sim: SimServer, x, y: int): bool =
+  ## True when a live lichen is on or 8-adjacent to (x, y). This is the cell
+  ## test the `stuck` rule measures a move against: the cog stays stuck while
+  ## it keeps contact with the lichen that grabbed it.
+  let li = sim.levelIndex
+  for monster in sim.levels[li].monsters:
+    if monster.alive and monster.species == spLichen and
+        chebyshev(monster.x, monster.y, x, y) <= 1:
+      return true
+  false
+
 proc applyMove(sim: var SimServer, dirIn: int) =
   var dir = dirIn
   if sim.cog.confused > 0:
@@ -391,8 +402,11 @@ proc applyMove(sim: var SimServer, dirIn: int) =
   if monster >= 0:
     sim.cogAttack(monster)
     return
-  if sim.cog.stuck > 0:
-    ## A lichen holds on: the cog may act, but a move away fails.
+  if sim.cog.stuck > 0 and sim.lichenHolds(sim.cog.x, sim.cog.y) and
+      not sim.lichenHolds(nx, ny):
+    ## A lichen holds on: the cog may act, and may still shuffle around the
+    ## lichen, but any move AWAY from it fails. A move that keeps contact —
+    ## and a move made after the lichen is dead — is not blocked.
     sim.say("You are stuck to the lichen.")
     return
   case sim.levels[li].terrainAt(nx, ny)

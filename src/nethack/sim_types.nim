@@ -15,7 +15,15 @@ import std/[strutils, unicode]
 const
   GameName* = "nethack"
 
-  GameVersion* = "1"
+  GameVersion* = "2"  ## GV2: a lichen's hold blocks only a move that breaks contact
+    ## The headline above sits on the SAME LINE as the number on purpose:
+    ## tools/ci/check_gameversion.sh reads that one line to tell "this branch
+    ## did not change the rules" from "another branch already spent this
+    ## number for a different rule".
+    ## GV2 (lichen `stuck`): a lichen's hold blocks only a move that BREAKS
+    ## contact with it — the cog may still attack, act, and shuffle to a cell
+    ## the same lichen is adjacent to, and a stale `stuck` counter left by a
+    ## dead lichen blocks nothing. GV1 blocked every move in every direction.
     ## GV1 (first rules): the eight-level seeded dungeon of the design note —
     ## 48x18 levels, eleven monster species, five item classes, four trap
     ## kinds, the lit-room visibility rule, hunger at 1/tick, permadeath, and
