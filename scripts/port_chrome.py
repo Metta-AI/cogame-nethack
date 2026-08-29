@@ -262,6 +262,16 @@ src = sub(src, "'<div class=\"ec-thead\"><span>Player</span><span>K</span><span>
 src = sub(src, "'<span class=\"fl-cap\">Lives left</span>' +",
           "'<span class=\"fl-cap\">Deepest level</span>' +")
 
+# --- the game block is parsed AFTER this script ----------------------------
+# so the starter's synchronous install() never fires (the block does not exist
+# yet) and the block only ever meets the context through frame()/event().
+# Publishing it as one global closes that gap: the block picks it up on load,
+# and tools/ci/renderer_fixture.html can drive the page's own entry points
+# with the page's OWN context instead of a stub that re-implements it.
+src = sub(src, """  if (window.NethackChrome) window.NethackChrome.install(PB_CTX);""",
+          """  window.NETHACK_CTX = PB_CTX;
+  if (window.NethackChrome) window.NethackChrome.install(PB_CTX);""")
+
 # --- the appended NETHACK game block ---------------------------------------
 marker = "<!-- ============================================================\n     PAINTBALL additions"
 i = src.index(marker)
