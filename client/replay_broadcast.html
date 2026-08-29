@@ -4749,15 +4749,19 @@ button.beat-marker {
              (head.scrollHeight > head.clientHeight + 1 ||
               head.scrollWidth > head.clientWidth + 1)) {
         guard += 1;
-        var size = parseFloat(window.getComputedStyle(stone).fontSize) || 16;
+        var size = parseFloat(window.getComputedStyle(stone).fontSize);
+        if (!(size > 0)) {
+          size = parseFloat(window.getComputedStyle(head).fontSize) || 16;
+        }
         // Proportional, not one px at a time: the box can be a third of the
         // height the stone wants, and a fixed step would run out of
-        // iterations before it fitted.
+        // iterations before it fitted. Every step is strictly SMALLER than
+        // the last, so the loop can only converge downward.
         var ratio = Math.min(head.clientHeight / Math.max(1, head.scrollHeight),
                              head.clientWidth / Math.max(1, head.scrollWidth));
-        var next = Math.floor(size * Math.min(1, ratio) * 10) / 10;
-        if (!(next > 0) || next >= size) next = size - 1;
-        if (next < 7) { stone.style.fontSize = '7px'; break; }
+        var next = Math.min(size - 0.5,
+                            Math.floor(size * Math.min(1, ratio) * 10) / 10);
+        if (next < 6) { stone.style.fontSize = '6px'; break; }
         stone.style.fontSize = next + 'px';
       }
     }

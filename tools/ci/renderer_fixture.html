@@ -233,9 +233,19 @@
     if ((strict || overflow !== 'visible') &&
         (el.scrollHeight > el.clientHeight + 1 ||
          el.scrollWidth > el.clientWidth + 1)) {
+      // Enough to name the cause without opening a browser: the box, the
+      // content, the padding that is eating the box, and the type size the
+      // element settled on.
+      var style = win.getComputedStyle(el);
+      var child = el.firstElementChild;
       fail(width + 'px ' + label + ': CLIPPED — content ' + el.scrollWidth +
         'x' + el.scrollHeight + ' in a ' + el.clientWidth + 'x' +
-        el.clientHeight + ' box');
+        el.clientHeight + ' box (font ' + style.fontSize + '/' +
+        style.lineHeight + ', padding ' + style.paddingTop + ' ' +
+        style.paddingBottom + (child ? ', child font ' +
+        win.getComputedStyle(child).fontSize + '/' +
+        win.getComputedStyle(child).lineHeight + ', child box ' +
+        child.scrollWidth + 'x' + child.scrollHeight : '') + ')');
     }
   }
 
