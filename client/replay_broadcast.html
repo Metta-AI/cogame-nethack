@@ -4256,6 +4256,7 @@ body[data-noviewpanel] #viewpanel { display: none !important; }
     core: core,
     getState: function () { return lastState; }
   };
+  window.NETHACK_CTX = PB_CTX;
   if (window.NethackChrome) window.NethackChrome.install(PB_CTX);
 
   relayout();
@@ -4518,9 +4519,20 @@ button.beat-marker {
    reserved from the cap the server enforces (MaxSayRunes = 140) rather than
    guessed — 140 runes at this size is at most four wrapped lines, and the row
    is allowed exactly that much height whether or not anything is speaking. */
+.feed-row.nh-say-row,
+.feed-row.nh-plan-row {
+  /* A sentence, not a label: the row is bounded by the feed's own column and
+     WRAPS inside it. The starter's rows are nowrap and content-sized, which
+     would grow a 140-rune remark leftward off the frame. */
+  max-width: 100%;
+  white-space: normal;
+}
 .feed-row.nh-say-row {
   align-items: flex-start;
-  min-height: calc(13 * var(--u));
+  /* The band a full-cap remark needs, reserved from MaxSayRunes = 140 at this
+     row's own font size and column width — about four wrapped lines — so the
+     feed does not jump when a remark lands. */
+  min-height: calc(34 * var(--u));
 }
 .feed-row.nh-say-row .nh-who {
   font-family: var(--finefont);
@@ -4533,7 +4545,6 @@ button.beat-marker {
   color: var(--amber);
   white-space: normal;
   overflow-wrap: anywhere;
-  max-height: calc(52 * var(--u));
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -4646,7 +4657,10 @@ button.beat-marker {
   // Every feed row and beat nethack produces. Returns true when the event was
   // handled here, so the inherited switch never doubles it.
   function nhEvent(e, s, ctx) {
-    CTX = ctx;
+    // The context is installed once and only replaced when the page hands a
+    // new one over, so tools/ci/renderer_fixture.html can drive these exact
+    // entry points with the page's OWN context rather than a stub.
+    if (ctx) CTX = ctx;
     if (BEAT_KINDS[e.k]) {
       nhBeat(s, e.t, e.k, beatLabelFor(e) + ' — click to jump here');
     }
@@ -4813,17 +4827,58 @@ button.beat-marker {
     }
     var nh = s.nh || {};
     var tiny = $('stage') && $('stage').classList.contains('tiny');
-    var rows = tiny ? [] : (nh.map || []);
+    var rows = (tiny ? [] : (nh.map || [])).slice();
     var messages = nh.messages || [];
     var message = messages.length ? messages[messages.length - 1] : '';
     var body = rows.join('\n');
-    var key = body + '|' + message + '|' + (nh.status || '');
+    // The panel is draggable and resizable, so its box is not knowable from
+    // CSS alone: measure it. The glyph size comes from the measured width so
+    // all 48 columns fit, and any row that would not fit the measured height
+    // is DROPPED rather than drawn outside the panel — which is what keeps
+    // the terminal honest under --strict-text-bounds at every width.
+    var key = body + '|' + message + '|' + (nh.status || '') + '|' +
+      pre.clientWidth + 'x' + pre.clientHeight;
     if (pre._key === key) return;
     pre._key = key;
-    pre.innerHTML =
-      (body ? CTX.esc(body) + '\n' : '') +
-      '<span class="msg">' + CTX.esc(message) + '</span>\n' +
-      '<span class="stat">' + CTX.esc(nh.status || '') + '</span>';
+    var status = nh.status || '';
+    var longest = Math.max(message.length, status.length,
+                           rows.length ? rows[0].length : 0);
+    var cols = longest;
+    var writeRows = function (list, width) {
+      var clip = function (line) {
+        return (width > 0 && line.length > width) ? line.slice(0, width) : line;
+      };
+      pre.innerHTML =
+        (list.length ? CTX.esc(list.map(clip).join('\n')) + '\n' : '') +
+        '<span class="msg">' + CTX.esc(clip(message)) + '</span>\n' +
+        '<span class="stat">' + CTX.esc(clip(status)) + '</span>';
+    };
+    pre.style.fontSize = '';
+    writeRows(rows, cols);
+    // 1. the glyph size comes from the measured width, down to a legible floor
+    if (pre.clientWidth > 0 && pre.scrollWidth > pre.clientWidth) {
+      var base = parseFloat(window.getComputedStyle(pre).fontSize) || 10;
+      var fitted = Math.max(5, base * pre.clientWidth / pre.scrollWidth);
+      pre.style.fontSize = (Math.floor(fitted * 10) / 10) + 'px';
+      writeRows(rows, cols);
+    }
+    // 2. below the floor there are simply not enough columns in the box: drop
+    //    the ones that do not fit rather than draw them outside it
+    var wide = 0;
+    while (cols > 4 && pre.clientWidth > 0 &&
+           pre.scrollWidth > pre.clientWidth && wide < 8) {
+      wide += 1;
+      cols = Math.max(4, Math.floor(cols * pre.clientWidth / pre.scrollWidth));
+      writeRows(rows, cols);
+    }
+    // 3. and the rows that do not fit the measured height go the same way
+    var guard = 0;
+    while (rows.length > 0 && pre.clientHeight > 0 &&
+           pre.scrollHeight > pre.clientHeight && guard < 64) {
+      guard += 1;
+      rows.pop();
+      writeRows(rows, cols);
+    }
     var nameEl = $('fpv-name');
     if (nameEl) {
       var line = 'ALPHA THE DIGGER · DLVL ' + (nh.depth || 1);
@@ -4905,7 +4960,7 @@ button.beat-marker {
   }
 
   function nhFrame(s, ctx, jumped) {
-    CTX = ctx;
+    if (ctx) CTX = ctx;
     if (jumped) { placed = {}; lastEnd = ''; }
     followCog(s);
     renderDungeonClock(s);
@@ -4926,10 +4981,14 @@ button.beat-marker {
   }
 
   window.NethackChrome = {
-    install: function (ctx) { CTX = ctx; },
+    install: function (ctx) { if (ctx) CTX = ctx; },
     frame: nhFrame,
     event: nhEvent
   };
+  // This block is parsed after the page's own script, so the page cannot call
+  // install() synchronously; it publishes the context instead and the block
+  // picks it up here. The page still passes it to every frame()/event() call.
+  if (window.NETHACK_CTX) window.NethackChrome.install(window.NETHACK_CTX);
 })();
 </script>
 

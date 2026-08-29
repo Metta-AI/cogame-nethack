@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nethack renderer fixture — worst-case LLM text</title>
+<!--
+  THE WORST-CASE RENDERER FIXTURE (prompts/30-review-loop.md item 15).
+
+  docker_smoke.sh runs with no ANTHROPIC_API_KEY, so the seat in every replay
+  CI can produce plays the scripted delver, and a scripted baseline emits no
+  `say` and no `notes`. The whole class of chrome that exists to show what a
+  model said — the ALPHA "…" feed row, the PLAN row, the MISSED THE CALL row —
+  is therefore untouched by the replay smoke, which is exactly how cogchemists
+  shipped four speech bubbles clipped to slivers with a green board.
+
+  So this page drives the REAL viewer with text built to hurt. It loads the
+  shipped bundle's own index.html in an iframe (viewer.html — the CI step
+  renames it) and calls the page's own installed chrome through
+  window.NethackChrome. It re-implements NO drawing: every row measured here
+  was produced by client/nethack_block.html running inside the real page, with
+  the real CSS, the real feed and the real fonts (the particle-worlds
+  2026-08-26 scar).
+
+  What it hands the page, at 360, 640 and 1280 px wide:
+    * a `say` of exactly MaxSayRunes (140) runes, deliberately mixed 4-byte
+      emoji, wide CJK and latin so it is the widest 140 runes the cap allows;
+    * a `plan` with the full ten-action budget, truncated and with drops;
+    * a `fallback`, a kill, a hurt, an oracle hint, a deed, a level-up, a
+      descent, a hunger change and the death line;
+    * a full 48x18 terminal map, the message line and the status line;
+    * all eight depth-ladder rungs, the three deed chips, and the tombstone
+      endcard for each of death / bottom / escaped / turnCap.
+
+  What it asserts, per width — the DOM equivalent of `canvas_text`, because
+  every string this viewer draws is DOM text, not canvas text (a canvas can
+  accept a draw at a negative coordinate; a DOM box can be pushed off-screen
+  or clipped by an ancestor's overflow, which is the same defect):
+    1. every measured element's box is inside the viewport;
+    2. no measured element sits inside the transport band (--band), which is
+       the checklist's own rule 14(b);
+    3. no measured element is CLIPPED — scrollHeight/scrollWidth inside the
+       box it was given, so the 140-rune remark is fully readable rather than
+       cut to the first line;
+    4. the strings are still FULL LENGTH — the fixture reads the remark back
+       out of the row and compares it rune for rune, so a quietly shortened
+       remark cannot leave this page passing while testing nothing.
+
+  On success it sets data-replay-loaded="true" on <html>; on any failure it
+  sets data-replay-error with the first failing measurement, which is what
+  makes `node tools/ci/viewer_smoke.mjs --strict-text-bounds` exit 1.
+-->
+<style>
+  html, body { margin: 0; background: #14100c; color: #f2e8d8;
+               font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  #frame { border: 0; display: block; background: #000; }
+  #report { padding: 8px 10px; white-space: pre-wrap; }
+  .bad { color: #ff6a5e; }
+  .good { color: #7fd8a0; }
+</style>
+</head>
+<body>
+<iframe id="frame" width="1280" height="720"></iframe>
+<div id="report">renderer fixture: starting…</div>
+<script>
+(function () {
+  'use strict';
+
+  var MAX_SAY_RUNES = 140;        // src/nethack/sim_types.nim: MaxSayRunes
+  var TOL = 1.5;                  // css px of sub-pixel slack
+
+  // The widest 140 runes the cap allows: 4-byte emoji, full-width CJK and
+  // latin, in a sentence a policy could plausibly write.
+  function worstCaseSay() {
+    var head = '\u{1F480} rat first, then the gold, then the closed door west ' +
+      '\u2014 \u4f60\u597d\u4e16\u754c \u2014 kick it if it is locked ';
+    var runes = Array.from(head);
+    var filler = Array.from('\u{1F5FA}\u2620abcdefghij');
+    var i = 0;
+    while (runes.length < MAX_SAY_RUNES) {
+      runes.push(filler[i % filler.length]);
+      i += 1;
+    }
+    return runes.slice(0, MAX_SAY_RUNES).join('');
+  }
+
+  var SAY = worstCaseSay();
+  var WIDTHS = [[360, 203], [640, 360], [1280, 720]];
+  var failures = [];
+  var measured = 0;
+  var lines = [];
+
+  function log(text, cls) {
+    lines.push(cls ? '<span class="' + cls + '">' + text + '</span>' : text);
+    document.getElementById('report').innerHTML = lines.join('\n');
+  }
+
+  function fail(text) {
+    failures.push(text);
+    log('FAIL ' + text, 'bad');
+  }
+
+  function runeLength(text) { return Array.from(String(text || '')).length; }
+
+  function terminalRows() {
+    var rows = [];
+    for (var y = 0; y < 18; y += 1) {
+      var row = '';
+      for (var x = 0; x < 48; x += 1) {
+        row += (y === 9 && x === 24) ? '@' : (x % 7 === 0 ? '#' : '.');
+      }
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function stateFor(endRule, phase) {
+    var ladder = [];
+    for (var d = 1; d <= 8; d += 1) {
+      ladder.push({
+        d: d, visited: d <= 4, current: d === 4, deepest: d === 4,
+        ticks: d * 137, kills: d, gold: d * 31, turns: d * 5,
+        grave: endRule === 'death' && d === 4
+      });
+    }
+    return {
+      t: 1234, mt: 2200, ph: phase || 'playing', pl: true, sp: 1, mx: 2200,
+      st: 0, mm: -1, teams: { red: { lives: 309240, held: 309240, cov: 12,
+                                     own: false, tags: 11, cogs: 1,
+                                     paint: 712, policies: ['nethack-loremaster'],
+                                     prog: 4 } },
+      roster: [{ s: 0, team: 'red', name: 'nethack-loremaster', alias: 'Alpha',
+                 pol: 'nethack-loremaster', col: 0, alive: endRule !== 'death',
+                 lives: 9, hp: 9, k: 11, d: 0, cap: 3, tk: 0 }],
+      nh: {
+        depth: 4, deepest: 4, levels: 8, hp: 9, maxhp: 21, ac: 7, gold: 214,
+        xp: 42, xlevel: 3, hunger: 'Weak', nutrition: 40, score: 309240,
+        turn: 27, turns: 55, kills: 11, meals: 2, kicks: 1, traps: 3,
+        seen: 712, cells: 6912, fallbacks: 1, alias: 'Alpha the Digger',
+        cx: 24, cy: 9,
+        status: 'Dlvl:4 $:214 HP:9(21) AC:7 Xp:3/42 T:1234 Weak',
+        messages: ['You hit the hill orc. The hill orc bites!',
+                   'You are beginning to feel weak.'],
+        map: terminalRows(),
+        deeds: [{ name: 'fed', earned: true }, { name: 'hoard', earned: true },
+                { name: 'oracle', earned: false }],
+        ladder: ladder, say: SAY, endRule: endRule || '',
+        cause: endRule === 'death' ? 'killed' : 'none',
+        killer: 'hill orc'
+      }
+    };
+  }
+
+  // Every event whose row carries text, worst case first.
+  function eventsFor(state) {
+    return [
+      { t: 1231, k: 'kill', monster: 'hill orc' },
+      { t: 1231, k: 'hurt', by: 'hill orc', dmg: 6, hp: 9, maxhp: 21 },
+      { t: 1232, k: 'gold', amount: 43, total: 214 },
+      { t: 1232, k: 'item', name: 'a food ration', letter: 'c' },
+      { t: 1232, k: 'eat', name: 'food ration', nutrition: 800 },
+      { t: 1233, k: 'quaff', appearance: 'smoky', effect: 'sleeping' },
+      { t: 1233, k: 'trap', kind: 'pit', dmg: 4 },
+      { t: 1233, k: 'door', action: 'kick', x: 12, y: 4 },
+      { t: 1233, k: 'oracle', paid: true, hint: 'south-west' },
+      { t: 1233, k: 'levelup', xlevel: 3, maxhp: 21 },
+      { t: 1233, k: 'deed', name: 'hoard' },
+      { t: 1233, k: 'hunger', state: 'Weak' },
+      { t: 1234, k: 'descend', from: 3, to: 4 },
+      { t: 1234, k: 'death', cause: 'killed', killer: 'hill orc', depth: 4,
+        tick: 1234 },
+      // last, because the feed keeps only its most recent rows and these are
+      // the three the whole fixture exists to measure
+      { t: 1234, k: 'plan', n: 27,
+        verbs: ['travel', 'move', 'move', 'kick', 'move', 'pickup', 'eat',
+                'quaff', 'search', 'down'],
+        truncated: true, dropped: 3 },
+      { t: 1234, k: 'fallback', cause: 'transport_error' },
+      { t: 1234, k: 'say', text: SAY }
+    ];
+  }
+
+  function rafs(win, count) {
+    return new Promise(function (resolve) {
+      var left = count;
+      var step = function () {
+        left -= 1;
+        if (left <= 0) resolve();
+        else win.requestAnimationFrame(step);
+      };
+      win.requestAnimationFrame(step);
+    });
+  }
+
+  function bandOf(win) {
+    var raw = win.getComputedStyle(win.document.documentElement)
+      .getPropertyValue('--band');
+    var value = parseFloat(raw);
+    return isFinite(value) ? value : 0;
+  }
+
+  // The DOM equivalent of viewer_smoke's canvas_text check. `strict` marks an
+  // element that OWNS text: its content must fit the box it was given,
+  // whatever its overflow is, because a string that spills out of a
+  // visible-overflow box is drawn over its neighbours and read as neither.
+  // Containers that are laid out to grow (the feed's rows are right-anchored
+  // and grow leftward by design) are measured by their box alone.
+  function measure(win, label, el, width, strict) {
+    if (!el) return;
+    measured += 1;
+    var rect = el.getBoundingClientRect();
+    var w = win.innerWidth;
+    var h = win.innerHeight;
+    var band = bandOf(win);
+    if (rect.width <= 0 || rect.height <= 0) {
+      fail(width + 'px ' + label + ': drawn with an empty box');
+      return;
+    }
+    var edges = [];
+    if (rect.top < -TOL) edges.push('top');
+    if (rect.left < -TOL) edges.push('left');
+    if (rect.right > w + TOL) edges.push('right');
+    if (rect.bottom > h + TOL) edges.push('bottom');
+    if (edges.length) {
+      fail(width + 'px ' + label + ': outside the frame (' + edges.join('+') +
+        ') box=[' + [rect.left, rect.top, rect.right, rect.bottom]
+          .map(Math.round).join(',') + '] frame=' + w + 'x' + h);
+    }
+    if (band > 0 && rect.bottom > h - band + TOL) {
+      fail(width + 'px ' + label + ': sits inside the ' + Math.round(band) +
+        'px transport band (bottom ' + Math.round(rect.bottom) + ' of ' + h + ')');
+    }
+    var overflow = win.getComputedStyle(el).overflow;
+    if ((strict || overflow !== 'visible') &&
+        (el.scrollHeight > el.clientHeight + 1 ||
+         el.scrollWidth > el.clientWidth + 1)) {
+      fail(width + 'px ' + label + ': CLIPPED — content ' + el.scrollWidth +
+        'x' + el.scrollHeight + ' in a ' + el.clientWidth + 'x' +
+        el.clientHeight + ' box');
+    }
+  }
+
+  function sayRow(win) {
+    var rows = win.document.querySelectorAll('#killfeed .feed-row.nh-say-row');
+    return rows.length ? rows[rows.length - 1] : null;
+  }
+
+  async function driveWidth(frame, width, height) {
+    frame.width = width;
+    frame.height = height;
+    frame.style.width = width + 'px';
+    frame.style.height = height + 'px';
+    var win = frame.contentWindow;
+    win.dispatchEvent(new win.Event('resize'));
+    await rafs(win, 4);
+
+    var state = stateFor('', 'playing');
+    var chrome = win.NethackChrome;
+    chrome.frame(state, undefined, true);
+    var events = eventsFor(state);
+    for (var i = 0; i < events.length; i += 1) {
+      chrome.event(events[i], state);
+    }
+    chrome.frame(state, undefined, false);
+    await rafs(win, 6);
+
+    var doc = win.document;
+    var row = sayRow(win);
+    if (!row) {
+      fail(width + 'px: the say row never reached the feed');
+    } else {
+      measure(win, 'say row', row, width, true);
+      var text = row.textContent || '';
+      var quoted = text.slice(text.indexOf('\u201c') + 1,
+                              text.lastIndexOf('\u201d'));
+      if (quoted !== SAY) {
+        fail(width + 'px: the say row was shortened — ' + runeLength(quoted) +
+          ' of ' + MAX_SAY_RUNES + ' runes survived');
+      }
+      var inner = row.querySelector('.nh-say-text');
+      measure(win, 'say text', inner, width, true);
+    }
+    var planRow = doc.querySelector('#killfeed .feed-row.nh-plan-row');
+    measure(win, 'plan row', planRow, width, true);
+    if (planRow && planRow.textContent.indexOf('TRAVEL') < 0) {
+      fail(width + 'px: the plan row lost its verbs');
+    }
+    measure(win, 'feed', doc.getElementById('killfeed'), width);
+    measure(win, 'terminal panel', doc.getElementById('nh-term'), width, true);
+    measure(win, 'depth ladder', doc.getElementById('nh-ladder'), width);
+    measure(win, 'deed chips', doc.getElementById('nh-deeds'), width);
+    measure(win, 'scorebug', doc.getElementById('scorebug'), width);
+    measure(win, 'clock caption', doc.getElementById('clock-caption'), width, false);
+
+    // The tombstone, for every end rule, with the endcard actually shown.
+    var rules = ['death', 'bottom', 'escaped', 'turnCap'];
+    for (var r = 0; r < rules.length; r += 1) {
+      var over = stateFor(rules[r], 'gameover');
+      chrome.frame(over, undefined, true);
+      var card = doc.getElementById('endcard');
+      if (card) card.classList.add('on');
+      await rafs(win, 3);
+      measure(win, rules[r] + ' tombstone',
+              doc.getElementById('ec-headline'), width, true);
+      measure(win, rules[r] + ' summary', doc.getElementById('ec-how'), width,
+              true);
+      if (card) card.classList.remove('on');
+    }
+    var band = Math.round(bandOf(win));
+    var box = row ? row.getBoundingClientRect() : null;
+    log('  ' + width + 'x' + height + ': ' + measured + ' boxes measured, band=' +
+      band + 'px, say row=' + (box ? Math.round(box.width) + 'x' +
+      Math.round(box.height) + ' at y' + Math.round(box.top) : 'missing') +
+      ', ' + failures.length + ' failing so far');
+    if (band <= 0) {
+      fail(width + 'px: relayout() never published --band, so the band checks ' +
+        'above measured nothing');
+    }
+  }
+
+  function settle(el, message) {
+    document.documentElement.setAttribute(el, message);
+  }
+
+  async function main() {
+    var params = new URLSearchParams(location.search);
+    var replay = params.get('replay');
+    var frame = document.getElementById('frame');
+    var url = 'viewer.html' + (replay ? '?replay=' + encodeURIComponent(replay) : '');
+    log('loading the shipped viewer: ' + url);
+    await new Promise(function (resolve) {
+      frame.addEventListener('load', resolve, { once: true });
+      frame.src = url;
+    });
+    // The chrome installs itself as the page's own script runs, whether or not
+    // a replay is attached; that is the object every measurement here goes
+    // through, so nothing is re-implemented.
+    var deadline = Date.now() + 45000;
+    while (Date.now() < deadline) {
+      var win = frame.contentWindow;
+      if (win && win.NethackChrome && win.document.getElementById('killfeed')) break;
+      await new Promise(function (r) { setTimeout(r, 100); });
+    }
+    var win = frame.contentWindow;
+    if (!win || !win.NethackChrome) {
+      settle('data-replay-error',
+        'the shipped page never installed window.NethackChrome');
+      return;
+    }
+    // Play every entrance animation THROUGH to its settled state before
+    // measuring: a row measured mid-slide reports the box it is sliding from,
+    // not the one it lives in. This is the only thing the fixture changes
+    // about the page it loads.
+    var settleStyle = win.document.createElement('style');
+    settleStyle.textContent =
+      '*, *::before, *::after { animation: none !important; ' +
+      'transition: none !important; }';
+    win.document.head.appendChild(settleStyle);
+    // Pause playback through the page's own transport, so a replay that is
+    // still running cannot age a measured row out from under the measurement.
+    // The button's own glyph is the page's play/pause state, so this pauses a
+    // playing replay and never starts a paused one.
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      var playButton = win.document.getElementById('btn-play');
+      if (!playButton || playButton.textContent === '\u25B6') break;
+      playButton.click();
+      await new Promise(function (r) { setTimeout(r, 250); });
+    }
+    for (var i = 0; i < WIDTHS.length; i += 1) {
+      await driveWidth(frame, WIDTHS[i][0], WIDTHS[i][1]);
+    }
+    var summary = 'dom_text: ' + measured + ' boxes measured across ' +
+      WIDTHS.map(function (w) { return w[0] + 'px'; }).join(', ') +
+      ', say=' + runeLength(SAY) + ' runes, ' + failures.length + ' failing';
+    console.log(summary);
+    if (failures.length) {
+      log(summary, 'bad');
+      settle('data-replay-error', failures[0]);
+      for (var f = 0; f < failures.length; f += 1) console.error(failures[f]);
+      return;
+    }
+    log(summary, 'good');
+    settle('data-replay-loaded', 'true');
+  }
+
+  main().catch(function (error) {
+    settle('data-replay-error', 'renderer fixture crashed: ' +
+      (error && error.message ? error.message : String(error)));
+    log('CRASH ' + (error && error.stack || error), 'bad');
+  });
+})();
+</script>
+</body>
+</html>

@@ -170,6 +170,29 @@ suite "the wire constants reach the byte-identical chrome":
       player.applyReplayCommand(sim, config, ($speed)[0])
       check player.replaySpeed() == speed
 
+suite "the worst-case renderer fixture is shipped and wired":
+  test "the fixture drives the real page and ci.yml runs it":
+    ## The CI replay's seat is scripted and says nothing, so the say / plan /
+    ## fallback rows can only be exercised by a fixture. It must load the
+    ## SHIPPED page rather than re-implement any drawing, and it must be
+    ## driven by the same smoke harness with --strict-text-bounds.
+    let fixture = readFile("tools/ci/renderer_fixture.html")
+    check "viewer.html" in fixture          ## the shipped page, in an iframe
+    check "win.NethackChrome" in fixture    ## through the page's own chrome
+    check "MAX_SAY_RUNES = 140" in fixture
+    check "data-replay-loaded" in fixture
+    check "data-replay-error" in fixture
+    let ci = readFile(".github/workflows/ci.yml")
+    check "tools/ci/renderer_fixture.html" in ci
+    check "--strict-text-bounds" in ci
+
+  test "the terminal panel fits its own measured box":
+    ## The panel is draggable and resizable, so it sizes its glyphs from the
+    ## box it actually has and drops the columns and rows that do not fit.
+    check "pre.scrollWidth > pre.clientWidth" in appended
+    check "pre.scrollHeight > pre.clientHeight" in appended
+    check "rows.pop()" in appended
+
 suite "the static shell signals load and failure on <html>":
   test "static_replay.js sets data-replay-loaded and data-replay-error":
     let shell = readFile("replay-viewer/static_replay.js")

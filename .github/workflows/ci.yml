@@ -239,9 +239,15 @@ jobs:
             echo "::error::Fix with: git update-index --chmod=+x tools/build_replay_viewer.sh"
             exit 1; }
 
-      - name: Assert the viewer load test is present
+      - name: Assert the viewer load test and the renderer fixture are present
         run: |
           set -euo pipefail
+          test -s tools/ci/renderer_fixture.html || {
+            echo "::error::tools/ci/renderer_fixture.html is missing. It is the only"
+            echo "::error::gate that draws LLM-authored text: the CI replay's seat is"
+            echo "::error::scripted and says nothing, so without it the say/plan/"
+            echo "::error::fallback rows ship untested (checklist item 15)."
+            exit 1; }
           test -s tools/ci/viewer_smoke.mjs || {
             echo "::error::tools/ci/viewer_smoke.mjs is missing. It is the only gate that"
             echo "::error::EXECUTES the replay viewer; without it a bundle that deadlocks"
@@ -322,6 +328,46 @@ jobs:
             --soak 10 \
             --strict-text-bounds
 
+      # -----------------------------------------------------------------
+      # THE CI REPLAY CANNOT TALK. docker_smoke.sh runs without an
+      # ANTHROPIC_API_KEY, so its seat plays the scripted delver and emits no
+      # `say` at all: the step above can never draw the ALPHA "..." feed row,
+      # the PLAN row or the MISSED THE CALL row -- the whole class of chrome
+      # that exists to show what a model said (cogchemists 2026-08-24 shipped
+      # four speech bubbles clipped to slivers with everything green).
+      #
+      # tools/ci/renderer_fixture.html loads the SHIPPED bundle page in an
+      # iframe, drives its own chrome with a full-cap 140-rune remark of mixed
+      # emoji/CJK/latin, a full ten-verb plan, a fallback and the tombstone for
+      # every end rule, at 360, 640 and 1280 px, and fails unless every box is
+      # inside the frame, clear of the transport band, unclipped, and still
+      # carrying its full-length string.
+      # -----------------------------------------------------------------
+      - name: Drive the worst-case renderer fixture
+        run: |
+          set -euo pipefail
+          rm -rf dist/renderer-fixture
+          cp -r dist/static-replay-viewer dist/renderer-fixture
+          mv dist/renderer-fixture/index.html dist/renderer-fixture/viewer.html
+          cp tools/ci/renderer_fixture.html dist/renderer-fixture/index.html
+          replay=""
+          for candidate in dist/smoke/*.replay dist/smoke/replay.json; do
+            if [ -f "${candidate}" ]; then replay="${candidate}"; break; fi
+          done
+          test -n "${replay}" || {
+            echo "::error::no replay for the renderer fixture"; exit 1; }
+          node tools/ci/viewer_smoke.mjs \
+            --bundle dist/renderer-fixture \
+            --replay "${replay}" \
+            --timeout 90 \
+            --strict-text-bounds \
+            --out dist/renderer-fixture
+          # The fixture's own measurements, echoed into the job log: this
+          # viewer draws DOM text, so viewer_smoke's canvas_text total is 0 by
+          # construction and these lines are the evidence that the strings
+          # were measured at all.
+          python3 -c 'import json,sys; d=json.load(open("dist/renderer-fixture/viewer-smoke.json")); [print(l) for l in d.get("console_tail", []) if "dom_text" in l or "boxes measured" in l]'
+
       - name: Upload the viewer smoke evidence
         # Always: the screenshot and the JSON are most useful when the job is red.
         if: always()
@@ -331,6 +377,8 @@ jobs:
           path: |
             viewer-smoke.png
             viewer-smoke.json
+            dist/renderer-fixture/viewer-smoke.png
+            dist/renderer-fixture/viewer-smoke.json
           if-no-files-found: warn
           retention-days: 14
 
