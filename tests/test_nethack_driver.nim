@@ -191,7 +191,11 @@ suite "reply validation":
     check reply.actions[2].verb == vEat
     check reply.actions[2].item == 1
     check reply.actions[3].verb == vPickup
-    check reply.dropped == 3
+    ## three entries failed the schema: they are REPAIRED-counted, and
+    ## nothing overflowed the cap, so `dropped` stays 0. The two counters are
+    ## disjoint (results.repliesRepaired vs results.actionsDropped).
+    check reply.repaired == 3
+    check reply.dropped == 0
     check reply.say == "rat first"
     check reply.notes == "DL1"
 
@@ -205,6 +209,7 @@ suite "reply validation":
     let reply = parseReply(parseJson(text), letters, 10)
     check reply.actions.len == 10
     check reply.dropped == 15
+    check reply.repaired == 0
 
   test "a say-only reply is usable and a non-object is a parse failure":
     var letters: set[char] = {}

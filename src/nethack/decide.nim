@@ -41,15 +41,6 @@ type
     requestTicks*: seq[MonoTime]
 
 const
-  FallbackCauses* = [
-    "timeout", "parse_error", "transport_error", "no_credentials",
-    "rate_guard", "budget_guard", "disconnected"]
-    ## The CLOSED cause vocabulary of the design note's fallback record. A
-    ## provider 429 is a `rate_guard` cause like the engine's own trailing-60s
-    ## refusal is: both mean "the rate cap said no". `disconnected` is
-    ## declared here because the note declares it; with one seat whose socket
-    ## carries nothing but its registration, nothing in this fork can produce
-    ## it, and inventing a cause outside this list is what F11 was.
   RateGuardWindowRequests = 28
     ## The sidecar caps 30 requests/minute per episode. `turnSpacingMs` pins
     ## the steady state at 23/min, but a run of retrying turns issues two
@@ -128,7 +119,7 @@ proc turn*(
   engine: var DecisionEngine,
   sim: var SimServer,
   turnIndex, elapsedSeconds: int
-): tuple[reply: ParsedReply, records: seq[string], cause: string] =
+): tuple[reply: ParsedReply, records: seq[string]] =
   ## Runs ONE decision turn. Never raises: every failure path ends in a legal
   ## plan.
   let
@@ -153,7 +144,6 @@ proc turn*(
   if engine.llmOff or engine.client.disabled:
     let cause = if engine.llmOff: "budget_guard" else: "no_credentials"
     result.reply = engine.delverReply(sim)
-    result.cause = cause
     inc sim.fallbackTurns
     result.records.add(fallbackRecord(turnIndex, 1, cause,
       "the LLM is unavailable for this turn; playing delver"))
@@ -163,7 +153,6 @@ proc turn*(
 
   if engine.recentRequests() >= RateGuardWindowRequests:
     result.reply = engine.delverReply(sim)
-    result.cause = "rate_guard"
     inc sim.fallbackTurns
     result.records.add(fallbackRecord(turnIndex, 1, "rate_guard",
       "the trailing-60s request count would breach the provider cap"))
@@ -227,7 +216,7 @@ proc turn*(
           if "timeout" in responses[0].error.toLowerAscii(): "timeout"
           else: "transport_error"
       elif error.msg.startsWith("llm throttled"):
-        lastCause = "rate_guard"
+        lastCause = "throttled"
       else:
         lastCause = "parse_error"
       result.records.add(
@@ -245,9 +234,8 @@ proc turn*(
   let cause =
     if engine.client.disabled or engine.client.transport == ltNone:
       "no_credentials"
-    elif engine.client.throttled: "rate_guard"
+    elif engine.client.throttled: "throttled"
     else: lastCause
-  result.cause = cause
   result.records.add(fallbackRecord(turnIndex, 2, cause,
     "seat fell back to the delver plan: " & lastDetail))
   echo "nethack llm: seat falling back to delver (", cause, ") on turn ",

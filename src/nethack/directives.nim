@@ -30,6 +30,13 @@ type
     say*: string
     notes*: string
     dropped*: int
+      ## Entries past `maxActionsPerTurn`: the turn's OVERFLOW, counted in
+      ## `results.actionsDropped`.
+    repaired*: int
+      ## Entries that did not validate against the schema and were dropped
+      ## (never rewritten), counted in `results.repliesRepaired`. The two are
+      ## disjoint: an entry is either past the cap or malformed, and an
+      ## overflow entry is never inspected.
     source*: DirectiveSource
     latencyMs*: int
 
@@ -143,18 +150,18 @@ proc parseReply*(
       inc result.dropped
       continue
     if entry.kind != JObject:
-      inc result.dropped
+      inc result.repaired
       continue
     let verb = parseVerb(entry{"do"}.getStr())
     if not verb.ok:
-      inc result.dropped
+      inc result.repaired
       continue
     var action = Action(verb: verb.verb, dir: 0, x: 0, y: 0, item: -1)
     case verb.verb
     of vMove, vKick, vChat:
       let dir = dirIndex(entry{"dir"}.getStr())
       if dir < 0:
-        inc result.dropped
+        inc result.repaired
         continue
       action.dir = dir
     of vTravel:
@@ -162,7 +169,7 @@ proc parseReply*(
         x = readInt(entry{"x"})
         y = readInt(entry{"y"})
       if not x.ok or not y.ok:
-        inc result.dropped
+        inc result.repaired
         continue
       action.x = clamp(x.value, 0, LevelW - 1)
       action.y = clamp(y.value, 0, LevelH - 1)
@@ -170,7 +177,7 @@ proc parseReply*(
       let letter = entry{"item"}.getStr().strip().toLowerAscii()
       if letter.runeLen != 1 or letter.len != 1 or
           letter[0] < 'a' or letter[0] > 'z' or letter[0] notin inventoryLetters:
-        inc result.dropped
+        inc result.repaired
         continue
       action.item = ord(letter[0]) - ord('a')
     else:
