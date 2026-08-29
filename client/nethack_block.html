@@ -644,10 +644,35 @@ button.beat-marker {
       headline = 'OUT OF TIME / DEEPEST LEVEL ' + (nh.deepest || 1) +
         ' / ' + (nh.score || 0) + ' POINTS';
     }
-    if (lastEnd === headline) return;
-    lastEnd = headline;
+    var key = headline + '|' + head.clientWidth + 'x' + head.clientHeight;
+    if (lastEnd === key) return;
+    lastEnd = key;
     head.innerHTML = '<span class="nh-stone">' +
       headline.split(' / ').map(CTX.esc).join('<br>') + '</span>';
+    // Four lines of a bitmap font in a box the endcard lays out: measure and
+    // shrink until they fit, exactly as the terminal panel does. Shortening
+    // the lines is not an option — this is the death line, and a headstone
+    // that reads 'KILLED BY A HILL...' is worse than a smaller one.
+    var stone = head.querySelector('.nh-stone');
+    if (stone && head.clientHeight > 0) {
+      stone.style.fontSize = '';
+      var guard = 0;
+      while (guard < 12 &&
+             (head.scrollHeight > head.clientHeight + 1 ||
+              head.scrollWidth > head.clientWidth + 1)) {
+        guard += 1;
+        var size = parseFloat(window.getComputedStyle(stone).fontSize) || 16;
+        // Proportional, not one px at a time: the box can be a third of the
+        // height the stone wants, and a fixed step would run out of
+        // iterations before it fitted.
+        var ratio = Math.min(head.clientHeight / Math.max(1, head.scrollHeight),
+                             head.clientWidth / Math.max(1, head.scrollWidth));
+        var next = Math.floor(size * Math.min(1, ratio) * 10) / 10;
+        if (!(next > 0) || next >= size) next = size - 1;
+        if (next < 7) { stone.style.fontSize = '7px'; break; }
+        stone.style.fontSize = next + 'px';
+      }
+    }
     var how = $('ec-how');
     if (how) {
       how.textContent = (nh.kills || 0) + ' monsters killed, ' + (nh.gold || 0) +
