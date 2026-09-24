@@ -47,3 +47,9 @@ From a Metta checkout with the Coworld training stack, pass absolute bridge
 and manifest paths to `recipes.external.coworld.train` for native PufferLib,
 or `recipes.external.coworld_metta_rl.train` for Metta RL. Use `players=1`,
 `max_decisions=55`, a timestep limit, and either certified variant ID.
+
+Both variants completed 512 Metta RL timesteps. A native PufferLib run on one
+RTX 4090 completed 4,096 timesteps per variant, saved checkpoints, reloaded
+them, and evaluated four games on each held-out seed. Normalized scores were
+0.000 on seeds 101 and 102 for both variants. These short runs verify the
+training and reload paths, not policy quality.
