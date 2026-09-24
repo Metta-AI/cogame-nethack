@@ -29,3 +29,21 @@ uv run --package metta-posttrain --extra train python -m metta_posttrain.train \
 
 The exporter uses the same observed ASCII map and message line as the hosted
 player. Unvisited cells and undiscovered dungeon state stay hidden.
+
+## Numeric reinforcement learning
+
+`tools/train_bridge.nim` exposes 904 values from the observed ASCII map, cog
+status, and inventory. Fifty action heads choose up to ten native commands,
+including movement, travel, item use, and search. The production parser and
+driver execute each plan. The bridge also publishes the hosted observation as
+`semantic_view` and `messages`.
+
+```sh
+nim c -d:release --path:src -o:/tmp/nethack-train-bridge tools/train_bridge.nim
+python3 tools/test_train_bridge.py /tmp/nethack-train-bridge
+```
+
+From a Metta checkout with the Coworld training stack, pass absolute bridge
+and manifest paths to `recipes.external.coworld.train` for native PufferLib,
+or `recipes.external.coworld_metta_rl.train` for Metta RL. Use `players=1`,
+`max_decisions=55`, a timestep limit, and either certified variant ID.

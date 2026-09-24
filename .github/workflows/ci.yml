@@ -184,6 +184,12 @@ jobs:
           nim c -d:release --path:src -o:/tmp/nethack-posttrain tools/export_posttrain.nim
           python3 tools/test_posttrain.py /tmp/nethack-posttrain
 
+      - name: Exercise numeric training bridge
+        run: |
+          set -euo pipefail
+          nim c -d:release --path:src -o:/tmp/nethack-train-bridge tools/train_bridge.nim
+          python3 tools/test_train_bridge.py /tmp/nethack-train-bridge
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs
   # end to end in raw docker with the certification fixture's seat mix.
