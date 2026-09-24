@@ -96,6 +96,8 @@ Challenge or BALROG number**, and the reasons are written down.
 
 ## Building and running it
 
+Training data for both certified variants: [TRAINING.md](TRAINING.md).
+
 The whole toolchain is pinned. CI is the harness:
 
 ```bash
