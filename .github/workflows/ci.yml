@@ -178,6 +178,12 @@ jobs:
           set -euo pipefail
           nim c -r --hints:off -d:release --path:src tools/tune_baselines.nim --check
 
+      - name: Export complete post-training games
+        run: |
+          set -euo pipefail
+          nim c -d:release --path:src -o:/tmp/nethack-posttrain tools/export_posttrain.nim
+          python3 tools/test_posttrain.py /tmp/nethack-posttrain
+
   # ---------------------------------------------------------------------
   # Packaging smoke: the production image builds, and one real episode runs
   # end to end in raw docker with the certification fixture's seat mix.
