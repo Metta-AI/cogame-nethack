@@ -80,8 +80,8 @@ suite "manifest pins":
 
   test "game.name equals the slug and the secret URI's namespace":
     check manifest{"game"}{"name"}.getStr() == "nethack"
-    check manifest{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.getStr() ==
-      "secret://coworld/nethack/anthropic_api_key"
+    doAssert manifest{"game"}{"runnable"}{"env"}{"ANTHROPIC_API_KEY_URI"}.isNil,
+      "hosted LLM uses the platform sidecar without provider secrets"
     check manifest{"game"}{"runnable"}{"run"}[0].getStr() == "/bin/nethack"
 
   test "the declared player asks for at least one whole cpu":

@@ -19,9 +19,7 @@
       "run": [
         "/bin/nethack"
       ],
-      "env": {
-        "ANTHROPIC_API_KEY_URI": "secret://coworld/nethack/anthropic_api_key"
-      }
+      "env": {}
     },
     "replay_viewer": {
       "bundle": "static-replay-viewer"
