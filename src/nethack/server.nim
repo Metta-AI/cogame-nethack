@@ -504,7 +504,7 @@ proc runServerLoop*(
         for record in outcome.records:
           replayWriter.writeChat(tickTime(sim.tickCount), 0, record)
         let observation = sim.observationJson(turnIndex, includeMap = false)
-        sim.lastSay = outcome.reply.say
+        sim.applyReplyMetadata(outcome.reply)
         ## Read by beginTurn when it derives this turn's `fallback` event;
         ## only a turn whose plan actually came from the fallback path
         ## carries one.
