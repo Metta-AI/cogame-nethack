@@ -9,7 +9,7 @@
 
 import std/json
 
-import sim
+import sim, directives
 
 type
   ExpandedPlan* = object
@@ -64,6 +64,13 @@ type TurnRunner* = object
     ## turns, and charging 36 idle turns for a four-step plan would make the
     ## interface unplayable rather than demanding.
   ticksRun*: int
+
+proc applyReplyMetadata*(sim: var SimServer, reply: ParsedReply) =
+  ## Call after capturing the current observation, before executing its plan.
+  ## A failed model call must not erase the scratchpad the next call needs.
+  sim.lastSay = reply.say
+  if reply.source == dsLlm:
+    sim.notes = reply.notes
 
 proc beginTurn*(sim: var SimServer, actions: seq[Action], dropped: int): TurnRunner =
   ## Expand, install the queue, and open the turn. Nothing carries over from
