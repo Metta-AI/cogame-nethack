@@ -27,17 +27,17 @@
     "protocols": {
       "player": {
         "type": "uri",
-        "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/PROTOCOL.md"
+        "value": "https://github.com/softmax-universe/cogame-nethack/blob/main/docs/PROTOCOL.md"
       },
       "global": {
         "type": "uri",
-        "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/PROTOCOL.md"
+        "value": "https://github.com/softmax-universe/cogame-nethack/blob/main/docs/PROTOCOL.md"
       }
     },
     "docs": {
       "readme": {
         "type": "uri",
-        "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/README.md"
+        "value": "https://github.com/softmax-universe/cogame-nethack/blob/main/README.md"
       },
       "pages": [
         {
@@ -45,7 +45,7 @@
           "title": "Rules",
           "content": {
             "type": "uri",
-            "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/RULES.md"
+            "value": "https://github.com/softmax-universe/cogame-nethack/blob/main/docs/RULES.md"
           }
         },
         {
@@ -53,7 +53,7 @@
           "title": "Actions and the reply format",
           "content": {
             "type": "uri",
-            "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/ACTIONS.md"
+            "value": "https://github.com/softmax-universe/cogame-nethack/blob/main/docs/ACTIONS.md"
           }
         },
         {
@@ -61,7 +61,7 @@
           "title": "What this is and is not a port of",
           "content": {
             "type": "uri",
-            "value": "https://github.com/Metta-AI/cogame-nethack/blob/main/docs/PORTING-NETHACK.md"
+            "value": "https://github.com/softmax-universe/cogame-nethack/blob/main/docs/PORTING-NETHACK.md"
           }
         }
       ]
@@ -600,7 +600,7 @@
         "PLAYER_SCRIPTED": "delver",
         "PLAYER_POLICY_LABEL": "delver"
       },
-      "source_url": "https://github.com/Metta-AI/cogame-nethack",
+      "source_url": "https://github.com/softmax-universe/cogame-nethack",
       "resources": {
         "requests": {
           "cpu": "100m",
